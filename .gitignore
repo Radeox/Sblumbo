@@ -1,0 +1,23 @@
+# Variabili d'ambiente locali
+.env
+.env.local
+
+# Bytecode e cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE, Editor & OS
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+
+# Note di lavoro temporanee
+NOTES.md
