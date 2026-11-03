@@ -1,6 +1,37 @@
 # Sblumbo 🧠🗂️
 
-An automated, zero-dependency Python worker that reads Obsidian **Daily Notes**, extracts and processes their contents using a local LLM (**Ollama**), and neatly triages them into their designated Vault folders and files, concluding with an automatic Git commit.
+An automated, zero-dependency Python toolchain for your **Obsidian Vault** powered by local LLMs (**Ollama**). It consists of two complementary workflows:
+1. **Sblumbo (`sblumbo.py`)**: Daily Note ingestion that extracts, enriches, and triages tasks, notes, ideas, and web links into your Vault with an automatic Git commit.
+2. **SblumBot (`telegram_bot.py`)**: A morning assistant that reviews remaining tasks, generates a calm daily focus summary, dynamically groups tasks into thematic categories with emojis, and delivers a private briefing to your Telegram.
+
+---
+
+## 🔄 System Architecture & Workflow
+
+```mermaid
+flowchart TD
+    subgraph Daily Ingestion ["Evening / Ingestion Workflow (sblumbo.py)"]
+        DN["Obsidian Daily Note (YYYY-MM-DD.md)"] --> Parser["Deterministic Section Parser"]
+        Parser --> |"Todo"| LLM1["Ollama (qwen3:4b)"]
+        Parser --> |"Ideas"| LLM2["Ollama (qwen3:4b)"]
+        Parser --> |"Notes"| LLM3["Ollama (qwen3:4b)"]
+        Parser --> |"Links"| Scraper["Web Scraper + Ollama"]
+
+        LLM1 --> |"Append active tasks"| TasksFile[("Tasks.md")]
+        LLM2 --> |"New markdown notes"| IdeasDir[("Ideas/")]
+        LLM3 --> |"New markdown notes"| NotesDir[("Notes/")]
+        Scraper --> |"Web bookmarks"| LinksDir[("Links/")]
+
+        TasksFile & IdeasDir & NotesDir & LinksDir --> Commit["Remove Daily Note & Git Commit"]
+    end
+
+    subgraph Morning Briefing ["Morning Briefing Workflow (telegram_bot.py - SblumBot)"]
+        TasksFile --> |"Read pending [-] tasks"| TaskExtractor["Task Extractor (strips dates)"]
+        TaskExtractor --> LLM_Morning["Ollama (qwen3:4b)"]
+        LLM_Morning --> |"Daily Focus + Dynamic Thematic Categories"| Formatter["SblumBot HTML Formatter"]
+        Formatter --> |"HTTPS Telegram Bot API"| TG["Private Telegram Chat"]
+    end
+```
 
 ---
 
@@ -74,7 +105,27 @@ cp .env.example .env
 
 ## 🤖 SblumBot: Telegram Morning Briefing (`telegram_bot.py`)
 
-A standalone morning worker that extracts all remaining unchecked tasks from `Tasks.md`, asks Qwen to produce a high-level focus summary, groups tasks under categorized headings with emojis, and delivers a formatted briefing directly to your Telegram chat.
+A standalone morning worker that reviews all pending, unchecked tasks from `Tasks.md`, asks Qwen to produce a calm daily focus summary, dynamically categorizes tasks with contextual emojis, and delivers an HTML-formatted briefing to your Telegram chat.
+
+### Key Highlights
+- **Dynamic Context-Aware Categorization**: The LLM analyzes the semantic meaning of your tasks on the fly and groups them into relevant categories (e.g. 💊 *Health & Pharmacy*, 💻 *Tech & Automation*, 🛒 *Errands*, 💼 *Work*). No empty buckets or rigid predefined schemas.
+- **Calm, Clutter-Free Presentation**: Uses a clean notebook (`📓`) header, strips `#YYYY-MM-DD` date tags from task lines, avoids artificial urgency indicators (`⚡`), and eliminates redundant metadata for quick reading.
+- **Safe HTML & Automatic Chunking**: Dynamically sanitizes text against HTML injection and splits messages exceeding Telegram's 4,096-character limit into clean parts.
+
+### Message Preview Example
+```text
+📓 SblumBot — Morning Briefing
+
+💡 Today's Focus:
+Panoramica tranquilla della giornata: configurazione delle notifiche Telegram e ritiro dei farmaci in farmacia.
+
+💊 Salute & Farmacia
+• ritirare sensori in farmacia borgo
+• ritirare eliquis in farmacia borgo
+
+💻 Tech & Automazioni
+• Configura bot Telegram per inviare notifiche da Obsidian al mattino
+```
 
 ### Usage
 ```bash
