@@ -1,4 +1,4 @@
-"""Processori per le singole sezioni (Todo, Ideas, Notes, Links) e salvataggio su file."""
+"""Processors for individual sections (Todo, Ideas, Notes, Links) and file storage."""
 
 import os
 import re
@@ -23,7 +23,7 @@ from .prompts import (
 )
 from .scraper import fetch_url_metadata
 
-# Frasi del system prompt che piccoli modelli (es. qwen2.5:3b) potrebbero ripetere
+# System prompt phrases that small models (e.g. qwen2.5:3b) might mistakenly parrot
 _HALLUCINATED_PHRASES = (
     "estrai tutte le azioni atomiche",
     "restituisci frasi concise all'infinito",
@@ -36,8 +36,8 @@ _HALLUCINATED_PHRASES = (
 )
 
 
-def clean_slug(title: str, fallback: str = "Nota") -> str:
-    """Converte un titolo in un nome file sicuro per qualsiasi filesystem."""
+def clean_slug(title: str, fallback: str = "Note") -> str:
+    """Convert a title into a filesystem-safe filename slug."""
     cleaned = re.sub(r'[\\/*?:"<>|#\r\n\t]+', "", title).strip(" ._")
     slug = re.sub(r"\s+", "_", cleaned)
     if not slug:
@@ -46,7 +46,7 @@ def clean_slug(title: str, fallback: str = "Nota") -> str:
 
 
 def get_unique_filepath(directory: str, base_slug: str) -> str:
-    """Restituisce un percorso file `.md` non esistente, aggiungendo `_2`, `_3` in caso di collisione."""
+    """Return a non-existent `.md` filepath, appending `_2`, `_3` on collisions."""
     os.makedirs(directory, exist_ok=True)
     candidate = os.path.join(directory, f"{base_slug}.md")
     if not os.path.exists(candidate):
@@ -61,23 +61,22 @@ def get_unique_filepath(directory: str, base_slug: str) -> str:
 
 
 def sanitize_yaml_string(value: str) -> str:
-    """Esegue l'escape dei caratteri speciali per stringhe YAML racchiuse tra doppi apici."""
+    """Escape special characters for double-quoted YAML strings."""
     cleaned = value.replace("\r", " ").replace("\n", " ").strip()
     cleaned = cleaned.replace("\\", "\\\\").replace('"', '\\"')
     return cleaned
 
 
 def sanitize_tag(tag: str) -> str:
-    """Normalizza un tag per il frontmatter YAML di Obsidian (niente '#' o spazi)."""
+    """Normalize a tag for Obsidian YAML frontmatter (no '#' or whitespace)."""
     cleaned = tag.strip().lstrip("#").strip()
-    # In Obsidian i tag YAML con spazi non sono validi: convertiamo gli spazi in trattini
     cleaned = re.sub(r"\s+", "-", cleaned)
     cleaned = re.sub(r'[\\/*?:"<>|,]', "", cleaned)
     return cleaned
 
 
 def format_tags_yaml(base_tag: str, raw_tags: list[str]) -> str:
-    """Formatta la lista di tag YAML evitando duplicati e rimuovendo tag vuoti."""
+    """Format YAML tag list avoiding duplicates and removing empty items."""
     seen: set[str] = {base_tag.lower()}
     lines = [f"  - {base_tag}"]
 
@@ -93,23 +92,23 @@ def format_tags_yaml(base_tag: str, raw_tags: list[str]) -> str:
 
 
 def _clean_placeholder_wikilinks(body: str) -> str:
-    """Rimuove segnaposto letterali come [[Concetto]] o [[Idea]] se il modello li ha inseriti."""
+    """Remove literal placeholders like [[Concetto]] or [[Idea]] if inserted by model."""
     cleaned = re.sub(r"\s*\[\[(?:Concetto|Idea)\]\]", "", body, flags=re.IGNORECASE)
     return cleaned.strip()
 
 
 def _clean_task_line(raw: str) -> str:
-    """Pulisce una singola riga di task da bullet, checkbox o tag data ridondanti."""
+    """Clean a single task line by stripping bullets, checkboxes, or redundant date tags."""
     cleaned = re.sub(
         r"^\s*(?:(?:[-*+]|\d+[.)])\s*)?(?:\[[ xX]?\]\s*)?", "", raw
     ).strip()
-    # Rimuove eventuale tag data finale già aggiunto dal modello
+    # Remove any trailing date tag already added
     cleaned = re.sub(r"\s+#\d{4}-\d{2}-\d{2}\s*$", "", cleaned).strip()
     return cleaned
 
 
 def _is_hallucinated_task(task: str) -> bool:
-    """Rileva se un task generato è in realtà vuoto o una ripetizione del prompt di sistema."""
+    """Detect if a generated task is empty or an echo of the system prompt."""
     low = task.strip().lower()
     if not has_meaningful_content(low):
         return True
@@ -117,16 +116,16 @@ def _is_hallucinated_task(task: str) -> bool:
 
 
 def process_todos(text: str, source_date: str, config: Config) -> int:
-    """Estrae e salva i Todo nel file Tasks.md del Vault.
+    """Extract and append Todos to Tasks.md in the Vault.
 
-    Include un fallback deterministico ai punti originali dell'utente se l'LLM
-    restituisce una lista vuota o perde degli elementi.
+    Includes a deterministic fallback to original user points if the LLM
+    returns an empty list or drops items.
     """
     raw_items = split_markdown_items(text)
     if not raw_items:
         return 0
 
-    # Ogni riga significativa nella sezione Todo costituisce almeno un punto da non perdere
+    # Ensure every non-empty line in Todo section is preserved
     todo_lines: list[str] = []
     for item in raw_items:
         for line in item.splitlines():
@@ -155,7 +154,7 @@ def process_todos(text: str, source_date: str, config: Config) -> int:
     valid_tasks: list[str] = []
     for entry in raw_tasks:
         if isinstance(entry, dict):
-            # Tolleranza se il modello restituisce oggetti {"task": "..."}
+            # Tolerate models returning {"task": "..."} objects
             candidate = str(
                 entry.get("task")
                 or entry.get("title")
@@ -173,8 +172,7 @@ def process_todos(text: str, source_date: str, config: Config) -> int:
             if cleaned_t and not _is_hallucinated_task(cleaned_t):
                 valid_tasks.append(cleaned_t)
 
-    # Fallback deterministico: se il modello ha restituito [] o meno task dei punti
-    # scritti dall'utente, usiamo direttamente le righe pulite dell'utente.
+    # Deterministic fallback: if LLM dropped items or returned [], use clean original lines
     if len(valid_tasks) < len(todo_lines):
         valid_tasks = todo_lines
 
@@ -191,7 +189,7 @@ def process_todos(text: str, source_date: str, config: Config) -> int:
 
 
 def process_ideas(text: str, source_date: str, config: Config) -> list[str]:
-    """Elabora ogni idea individualmente e restituisce i percorsi dei file creati."""
+    """Process each idea item individually and return created file paths."""
     raw_ideas = [
         item for item in split_markdown_items(text) if not is_pure_url_item(item)
     ]
@@ -243,7 +241,7 @@ def process_ideas(text: str, source_date: str, config: Config) -> list[str]:
 
 
 def process_notes(text: str, source_date: str, config: Config) -> list[str]:
-    """Elabora ogni appunto individualmente e restituisce i percorsi dei file creati."""
+    """Process each note item individually and return created file paths."""
     raw_notes = [
         item for item in split_markdown_items(text) if not is_pure_url_item(item)
     ]
@@ -295,7 +293,7 @@ def process_notes(text: str, source_date: str, config: Config) -> list[str]:
 
 
 def process_links(text: str, source_date: str, config: Config) -> list[str]:
-    """Estrae i link, scarica i metadati web, li riassume con Ollama e salva le note."""
+    """Extract links, scrape metadata, summarize with Ollama, and save notes."""
     extracted = extract_links_from_section(text)
     if not extracted:
         return []
@@ -324,7 +322,7 @@ def process_links(text: str, source_date: str, config: Config) -> list[str]:
                 json_schema=LINK_SCHEMA,
             )
         except Exception as exc:
-            print(f"[WARN] Fallback metadati per {meta['url']} (errore LLM: {exc})")
+            print(f"[WARN] Metadata fallback for {meta['url']} (LLM error: {exc})")
             parsed = {
                 "title": meta["title"],
                 "description": user_context or meta["description"],

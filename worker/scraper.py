@@ -1,4 +1,4 @@
-"""Scraper leggero per estrarre titolo e descrizione dagli URL."""
+"""Lightweight scraper to extract title and description from URLs."""
 
 import html
 import urllib.error
@@ -7,7 +7,7 @@ from html.parser import HTMLParser
 
 
 class MetaParser(HTMLParser):
-    """Parser HTML per estrarre <title> e <meta name/property="description">."""
+    """HTML parser to extract <title> and <meta name/property="description">."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -53,9 +53,9 @@ class MetaParser(HTMLParser):
 
 
 def fetch_url_metadata(raw_url: str, timeout: int = 6) -> dict[str, str]:
-    """Scarica i primi 64KB della pagina web per estrarre titolo e descrizione.
+    """Download the first 64KB of the webpage to extract title and description.
 
-    Non solleva eccezioni in caso di sito irraggiungibile, ma restituisce un fallback.
+    Does not raise exceptions on unreachable sites; returns fallback metadata instead.
     """
     url = raw_url.strip()
     if not url.startswith(("http://", "https://")):
@@ -70,7 +70,7 @@ def fetch_url_metadata(raw_url: str, timeout: int = 6) -> dict[str, str]:
                     "Gecko/20100101 Firefox/130.0"
                 ),
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                "Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept-Language": "en-US,en;q=0.9,it;q=0.8",
             },
         )
         with urllib.request.urlopen(req, timeout=timeout) as response:
@@ -81,12 +81,12 @@ def fetch_url_metadata(raw_url: str, timeout: int = 6) -> dict[str, str]:
                 "url": url,
                 "title": parser.title or url,
                 "description": (
-                    parser.description or "Nessuna descrizione presente nei metadati."
+                    parser.description or "No description found in metadata."
                 ),
             }
     except Exception as exc:
         return {
             "url": url,
             "title": url,
-            "description": f"Impossibile risolvere l'URL ({exc})",
+            "description": f"Unable to resolve URL ({exc})",
         }

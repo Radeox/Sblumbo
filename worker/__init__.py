@@ -1,4 +1,4 @@
-"""Pacchetto worker per l'ingestione delle Daily Note di Obsidian tramite Ollama."""
+"""Sblumbo package for Obsidian Daily Note ingestion via Ollama."""
 
 from .config import Config
 from .git_utils import VaultError, git_commit, resolve_daily_note_path, validate_vault

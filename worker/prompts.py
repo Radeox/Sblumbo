@@ -1,4 +1,4 @@
-"""Prompt di sistema e JSON Schema per l'estrazione tramite LLM (Ollama)."""
+"""System prompts and JSON schemas for LLM extraction (Ollama)."""
 
 TODO_SCHEMA = {
     "type": "object",

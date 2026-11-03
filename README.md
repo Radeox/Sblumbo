@@ -1,162 +1,174 @@
-# Obsidian Daily Worker 🧠🗂️
+# Sblumbo 🧠🗂️
 
-Un worker automatico e zero-dependency in Python che legge le **Daily Note** del tuo Vault Obsidian, ne estrae e rielabora i contenuti tramite un modello LLM locale (**Ollama**) e li smista ordinatamente nelle rispettive cartelle e file del Vault, effettuando infine un commit Git automatico.
-
----
-
-## ✨ Cosa fa
-
-A partire da una Daily Note strutturata in 4 sezioni (`Todo`, `Ideas`, `Notes`, `Links`):
-
-1. **📝 Todo** → Estrae tutte le azioni atomiche (separando eventuali frasi con più task) e le accoda al file `Tasks.md` nel formato `- [ ] Azione #YYYY-MM-DD`.
-2. **💡 Ideas** → Separa ogni idea dell'elenco puntato, genera titolo sintetico, tag YAML e corpo riformulato con wikilink, creando un file `.md` dedicato nella cartella `Ideas/`.
-3. **📦 Notes** → Separa ogni appunto, genera un titolo fedele al testo, tag pertinenti e corpo Markdown senza inventare dettagli, salvando ogni nota in `Notes/`.
-4. **🔗 Links** → Estrae gli URL (anche con testo di accompagnamento o sottotitoli di raggruppamento), scarica `<title>` e `<meta description>` della pagina web, li traduce/riassume in italiano tramite l'LLM e crea una scheda in `Links/`.
-5. **🧹 Pulizia & Git Commit** → Se e solo se tutte le sezioni vengono elaborate senza errori, rimuove la Daily Note processata ed esegue un commit Git nel Vault con il riepilogo degli elementi estratti (es. `Ingest 2026-11-02 ore 19:30:00 — 3 todo, 1 idea, 2 note, 4 links`).
+An automated, zero-dependency Python worker that reads Obsidian **Daily Notes**, extracts and processes their contents using a local LLM (**Ollama**), and neatly triages them into their designated Vault folders and files, concluding with an automatic Git commit.
 
 ---
 
-## 📁 Struttura del Progetto
+## ✨ Features
+
+Starting from an Obsidian Daily Note structured across 4 sections (`Todo`, `Ideas`, `Notes`, `Links`):
+
+1. **📝 Todo** → Extracts atomic actionable items (splitting compound tasks) and appends them to `Tasks.md` in the format `- [ ] Action #YYYY-MM-DD`. Includes a deterministic fallback ensuring no tasks are dropped.
+2. **💡 Ideas** → Processes each idea item, generates a concise title, YAML frontmatter tags, and clean Markdown with wikilinks, saving each file in `Ideas/`.
+3. **📦 Notes** → Formats each note faithfully without hallucinating unstated facts, generating clean titles, tags, and wikilinks in `Notes/`.
+4. **🔗 Links** → Extracts URLs (even with surrounding notes or grouping subtitles), scrapes `<title>` and `<meta description>` from the webpage, translates/summarizes the resource via LLM, and creates a note in `Links/`.
+5. **🧹 Cleanup & Git Commit** → If and only if all sections are processed successfully without errors or dropped data, removes the ingested Daily Note and makes a Git commit in the Vault with an informative summary (e.g., `Ingest 2026-11-02 at 19:30:00 — 3 todos, 1 idea, 2 notes, 4 links`).
+
+---
+
+## 📁 Project Structure
 
 ```text
-obsidian_worker/
-├── obsidian_worker.py      # Entry-point CLI e orchestrazione fail-safe
-├── .env                    # Configurazione locale (ignorata da Git)
-├── .env.example            # Template di configurazione
-├── .gitignore              # Esclusioni Git
-├── README.md               # Documentazione del progetto
+sblumbo/
+├── sblumbo.py              # Main CLI entry point and fail-safe orchestration
+├── .env                    # Local configuration (ignored by Git)
+├── .env.example            # Configuration template
+├── .gitignore              # Git ignore rules
+├── README.md               # Project documentation
 ├── tests/
-│   └── test_worker.py      # Suite di test per parser, processori, git e edge case
-└── worker/                 # Pacchetto sottomoduli
-    ├── __init__.py         # Esportazioni pubbliche del pacchetto
-    ├── config.py           # Loader .env zero-dependency e dataclass Config
-    ├── parser.py           # Parser deterministico sezioni Daily Note ed elenchi
-    ├── prompts.py          # System prompt anti-allucinazione e JSON Schema
-    ├── ollama_client.py    # Client HTTP per Ollama e health-check preventivo
-    ├── scraper.py          # Parser HTML per metadati (<title>, OpenGraph, meta description)
-    ├── processors.py       # Logica di trasformazione, anti-collisione file e sanitizzazione YAML
-    └── git_utils.py        # Validazione Vault, risoluzione note e commit Git sicuro
+│   └── test_worker.py      # Comprehensive edge-case test suite
+└── worker/                 # Core package modules
+    ├── __init__.py         # Public package exports
+    ├── config.py           # Zero-dependency .env loader and Config dataclass
+    ├── parser.py           # Deterministic parser for Daily Note sections and lists
+    ├── prompts.py          # Anti-hallucination system prompts and JSON schemas
+    ├── ollama_client.py    # HTTP client for Ollama and pre-flight health-check
+    ├── scraper.py          # HTML metadata scraper (<title>, OpenGraph, description)
+    ├── processors.py       # Section processors, anti-collision, and YAML sanitization
+    └── git_utils.py        # Vault validation, note resolution, and safe Git commits
 ```
 
 ---
 
-## ⚙️ Configurazione (`.env`)
+## ⚙️ Configuration (`.env`)
 
-Copia il file `.env.example` in `.env` e personalizza le variabili secondo il tuo ambiente:
+Copy the `.env.example` file to `.env` and adjust the variables for your setup:
 
 ```bash
 cp .env.example .env
 ```
 
-| Variabile | Default | Descrizione |
-| :--- | :--- | :--- |
-| `VAULT_PATH` | `~/Obsidian` | Percorso assoluto o con `~` della radice del tuo Vault Obsidian. |
-| `TODO_FILE` | `Tasks.md` | File di destinazione per i task (relativo a `VAULT_PATH` o assoluto). |
-| `NOTES_DIR` | `Notes` | Cartella di destinazione per le note (relativa a `VAULT_PATH` o assoluta). |
-| `IDEAS_DIR` | `Ideas` | Cartella di destinazione per le idee (relativa a `VAULT_PATH` o assoluta). |
-| `LINKS_DIR` | `Links` | Cartella di destinazione per i link (relativa a `VAULT_PATH` o assoluta). |
-| `DAILY_DIR` | `Daily` | Cartella in cui risiedono le Daily Note giornaliere. |
-| `OLLAMA_URL` | `http://127.0.0.1:11434/api/chat` | Endpoint API chat di Ollama. |
-| `OLLAMA_MODEL` | `qwen2.5:3b` | Nome del modello Ollama da utilizzare. |
-| `OLLAMA_TIMEOUT` | `300` | Timeout massimo in secondi per ogni richiesta a Ollama. |
-| `OLLAMA_TEMPERATURE` | `0.1` | Temperatura del modello (valori bassi riducono le allucinazioni). |
-| `OLLAMA_NUM_PREDICT` | `512` | Numero massimo di token generabili per singola chiamata. |
-| `URL_FETCH_TIMEOUT` | `6` | Timeout in secondi per lo scraping dei metadati di ogni URL. |
-| `GIT_AUTO_COMMIT` | `true` | Se `true`, esegue automaticamente il commit Git nel Vault a fine ingest. |
+| Variable             | Default                           | Description                                                            |
+| :------------------- | :-------------------------------- | :--------------------------------------------------------------------- |
+| `VAULT_PATH`         | `~/Obsidian`                      | Absolute path or `~` to the root of your Obsidian Vault.               |
+| `TODO_FILE`          | `Tasks.md`                        | Target file for tasks (relative to `VAULT_PATH` or absolute).          |
+| `NOTES_DIR`          | `Notes`                           | Target directory for notes (relative to `VAULT_PATH` or absolute).     |
+| `IDEAS_DIR`          | `Ideas`                           | Target directory for ideas (relative to `VAULT_PATH` or absolute).     |
+| `LINKS_DIR`          | `Links`                           | Target directory for links (relative to `VAULT_PATH` or absolute).     |
+| `DAILY_DIR`          | `Daily`                           | Directory containing Daily Notes.                                      |
+| `OLLAMA_URL`         | `http://127.0.0.1:11434/api/chat` | Ollama chat API endpoint.                                              |
+| `OLLAMA_MODEL`       | `qwen3:4b`                        | Ollama model to use (supports standard and thinking models).          |
+| `OLLAMA_TIMEOUT`     | `300`                             | Maximum timeout in seconds per Ollama request.                         |
+| `OLLAMA_TEMPERATURE` | `0.1`                             | Model temperature (lower values minimize hallucinations).              |
+| `OLLAMA_NUM_PREDICT` | `512`                             | Maximum number of tokens generated per call.                           |
+| `OLLAMA_THINK`       | `false`                           | Disable/enable thinking traces for reasoning models (e.g., `qwen3:4b`).|
+| `URL_FETCH_TIMEOUT`  | `6`                               | Timeout in seconds for webpage metadata scraping.                      |
+| `GIT_AUTO_COMMIT`    | `true`                            | If `true`, automatically commits changes to the Vault after ingestion. |
 
 ---
 
-## 🚀 Utilizzo
+## 🚀 Usage
 
-Lo script non richiede librerie Python esterne (usa esclusivamente la standard library di Python 3.10+). Assicurati solo che `ollama` sia attivo e che il modello configurato sia scaricato (`ollama pull qwen2.5:3b`).
+Sblumbo requires no external Python packages (runs on standard Python 3.10+). Ensure `ollama` is running and the configured model is pulled (`ollama pull qwen2.5:3b`).
 
-### 1. Esecuzione con percorso esplicito
-```bash
-python3 obsidian_worker.py ~/Obsidian/Daily/2026-11-02.md
-```
-
-### 2. Esecuzione rapida (solo data o nota di oggi)
-Se ometti l'argomento, il worker cercherà automaticamente la nota di oggi (`YYYY-MM-DD.md`) dentro `DAILY_DIR`:
-```bash
-# Cerca automaticamente ~/Obsidian/Daily/<OGGI>.md
-python3 obsidian_worker.py
-
-# Oppure passa solo la data:
-python3 obsidian_worker.py 2026-11-02
-```
-
-### 3. Opzioni CLI e modalità di test (`--dry-run`)
-Puoi verificare come vengono lette e suddivise le sezioni della tua Daily Note **senza** interrogare Ollama e **senza** toccare alcun file:
+### 1. Run with an explicit path
 
 ```bash
-python3 obsidian_worker.py 2026-11-02 --dry-run
+python3 sblumbo.py ~/Obsidian/Daily/2026-11-02.md
 ```
 
-Altre flag utili:
-- `--keep-daily`: elabora la nota ma **non** la elimina al termine.
-- `--no-commit`: elabora la nota ma salta il commit Git nel Vault.
-- `--env-file /percorso/custom.env`: usa un file `.env` alternativo.
+### 2. Quick run (date only or today's note)
+
+If omitted, Sblumbo automatically looks for today's note (`YYYY-MM-DD.md`) in `DAILY_DIR`:
+
+```bash
+# Automatically finds ~/Obsidian/Daily/<TODAY>.md
+python3 sblumbo.py
+
+# Or pass just the date:
+python3 sblumbo.py 2026-11-02
+```
+
+_(Note: `python3 obsidian_worker.py ...` also remains available as an alias)._
+
+### 3. CLI options and preview mode (`--dry-run`)
+
+Inspect how sections are parsed **without** querying Ollama and **without** modifying any files:
+
+```bash
+python3 sblumbo.py 2026-11-02 --dry-run
+```
+
+Additional flags:
+
+- `--keep-daily`: Ingests the note without deleting the original Daily Note.
+- `--no-commit`: Processes the note but skips Git commit in the Vault.
+- `--env-file /path/to/custom.env`: Use an alternative `.env` configuration file.
 
 ---
 
 ## 🧪 Testing (Edge Cases)
 
-Il progetto include una suite di test automatici in `tests/test_worker.py` (basata su `unittest` della standard library, non richiede dipendenze esterne né Ollama attivo).
+The project includes an automated test suite in `tests/test_worker.py` (built on standard library `unittest`, requiring no external dependencies or active Ollama instance).
 
 ```bash
-# Esegue tutti i test con output dettagliato
+# Run all tests with verbose output
 python3 -m unittest discover -s tests -v
 
-# Oppure direttamente tramite il file di test
+# Or run the test file directly
 python3 tests/test_worker.py
 
-# Esegue una singola classe di test (es. solo gli edge case del parser)
+# Run a specific test class (e.g. parser edge cases)
 python3 -m unittest tests.test_worker.TestParserEdgeCases -v
 ```
 
 ---
 
-## 📝 Formato Atteso della Daily Note
+## 📝 Expected Daily Note Format
 
-Il parser riconosce le 4 sezioni indipendentemente dalla presenza di spazi dopo l'emoji o dal livello dell'heading (`#`, `##`, `###`, `####`):
+The parser recognizes headings regardless of emoji spacing or heading depth (`#`, `##`, `###`, `####`):
 
 ```markdown
 ### 📝 Todo
-* Spostare le note da Keep e disinstallare l'app
-* Configurare il backup automatico
+
+- Migrate notes from Keep and uninstall the app
+- Set up automated backup
 
 ### 💡 Ideas
-* Creare una dashboard per monitorare i consumi di casa
+
+- Build a home energy consumption monitoring dashboard
 
 ### 📦 Notes
-* Riunione di 1 ora sul progetto Serf
-* Comando rapido per controllare le porte aperte con ss -tulpn
+
+- 1-hour team meeting regarding the Serf project
+- Quick command to check listening ports with ss -tulpn
 
 ### 🔗 Links
-* https://github.com/raspberrypi/rpi-image-gen
-* serfsrl.it - Sito ufficiale filtri aria
+
+- https://github.com/raspberrypi/rpi-image-gen
+- serfsrl.it - Official air filtration website
 ```
 
 ---
 
-## 🛡️ Fail-Safe e Sicurezza Dati
+## 🛡️ Fail-Safes and Data Protection
 
-Il worker integra protezioni specifiche per evitare perdite di dati o allucinazioni del modello:
+Sblumbo incorporates safety guarantees to prevent data loss or model hallucinations:
 
-1. **Zero Allucinazioni su Categorie Vuote**:
-   - Il parser line-by-line isola rigorosamente ogni sezione. Una sezione vuota (es. `### 📝 Todo` seguito subito da `### 💡 Ideas`) o contenente solo marcatori di elenco vuoti (`* `, `- [ ]`) viene scartata a monte senza interrogare l'LLM.
-   - Evita il bug per cui `qwen2.5:3b` ripeteva le istruzioni del prompt di sistema come se fossero task quando riceveva input vuoti o mal catturati.
-2. **Isolamento tra Link, Note e Idee**:
-   - Eventuali sottotitoli usati per raggruppare i link (es. `### Herolapse` dentro `### 🔗 Links`) non interrompono più la sezione `Links` e non vengono scambiati per URL.
-   - Se un URL puro finisce per errore in `Notes` o `Ideas`, viene filtrato in modo che il modello non inventi note o idee fittizie a partire da un semplice indirizzo web.
-3. **Controllo Preventivo del Vault e della Nota**:
-   - Verifica che `VAULT_PATH` esista, sia una directory valida e abbia i permessi di lettura/scrittura.
-   - Impedisce di processare ed eliminare accidentalmente il file indice `Daily/Daily.md`.
-4. **Health-Check Preventivo di Ollama**:
-   - Prima di iniziare qualsiasi operazione, verifica che il server Ollama risponda e che il modello scelto sia installato.
-5. **Rimozione Transazionale della Daily Note**:
-   - Se anche una sola sezione va in errore (es. crash di Ollama durante l'elaborazione), la Daily Note originale **non viene eliminata**, preservando tutti i tuoi appunti.
-6. **Anti-Collisione File e Sanitizzazione YAML**:
-   - Se due note generano lo stesso titolo/slug, non si sovrascrivono: viene generato un suffisso progressivo (`Titolo_2.md`).
-   - I titoli con doppi apici o due punti (`:`) e i tag con spazi vengono sanitizzati per garantire un frontmatter YAML sempre valido per Obsidian.
-   - Assicura che `.stversions` e `.stfolder` (Syncthing) siano ignorati da Git prima del commit.
+1. **Deterministic Task Fallback**:
+   - If an LLM returns an empty task list or drops user tasks on single-line or short bullet points, a deterministic fallback ensures all original lines are preserved in `Tasks.md`.
+2. **Empty Category Isolation**:
+   - Empty sections or lines with only whitespace/empty bullets (`* `, `- [ ]`, `[x]`) are discarded upfront before querying the LLM, preventing hallucinated instructions.
+3. **Non-destructive Ingest Safeguard**:
+   - If any section with content fails to produce output or encounters an error, the original Daily Note is **never deleted**.
+4. **Git Safe Staging**:
+   - Staging distinguishes existing files from deleted files (`git rm --ignore-unmatch`), preventing Git exit code 128 when untracked notes are removed.
+5. **Vault & Index Protection**:
+   - Validates that `VAULT_PATH` exists, is a directory, and has read/write permissions.
+   - Prevents accidental ingestion or deletion of folder index files (such as `Daily/Daily.md`).
+6. **Pre-flight Ollama Health Check**:
+   - Confirms that the Ollama daemon is reachable and the required model is pulled before performing any file operations.
+7. **File Collision Avoidance & YAML Sanitization**:
+   - Duplicate titles generate incremental filenames (`Note_2.md`) rather than overwriting existing notes.
+   - Frontmatter strings and tags are sanitized to ensure valid Obsidian YAML syntax.
+   - Syncthing versioning directories (`.stversions`, `.stfolder`) are automatically kept in `.gitignore`.

@@ -1,9 +1,9 @@
-"""Parser deterministico per le sezioni della Daily Note e gli elenchi Markdown."""
+"""Deterministic parser for Daily Note sections and Markdown lists."""
 
 import re
 
 
-# Intestazioni di sezione note (case-insensitive, con o senza emoji)
+# Known section aliases (case-insensitive, with or without emojis)
 _SECTION_ALIASES: dict[str, tuple[str, ...]] = {
     "todo": ("todo", "todos", "task", "tasks", "to do", "da fare"),
     "ideas": ("ideas", "idea", "idee", "spunti"),
@@ -11,18 +11,18 @@ _SECTION_ALIASES: dict[str, tuple[str, ...]] = {
     "links": ("links", "link", "url", "urls", "risorse"),
 }
 
-# Regex che individua qualsiasi heading Markdown di livello 1-6 (anche senza spazio dopo #{2,6}, es. "###📝 Todo")
+# Regex matching Markdown headings of levels 1-6 (with or without space after #{2,6}, e.g. "###📝 Todo")
 _HEADING_RE = re.compile(r"^\s*(#{1,6}\s+|#{2,6})(.+?)\s*$")
 
-# Regex per righe di separazione orizzontale Markdown (---, ***, ___)
+# Regex for Markdown horizontal divider lines (---, ***, ___)
 _HR_RE = re.compile(r"^\s*([-*_])(?:\s*\1){2,}\s*$", re.MULTILINE)
 
-# Regex per rimuovere commenti HTML prima del parsing
+# Regex to strip HTML comments before parsing
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def _strip_frontmatter(content: str) -> str:
-    """Rimuove eventuale YAML frontmatter iniziale delimitato da '---'."""
+    """Remove leading YAML frontmatter delimited by '---'."""
     text = content.lstrip("\ufeff")
     lines = text.splitlines()
     if not lines or lines[0].strip() != "---":
@@ -32,17 +32,15 @@ def _strip_frontmatter(content: str) -> str:
         stripped = lines[idx].strip()
         if stripped in ("---", "..."):
             return "\n".join(lines[idx + 1 :])
-        # Se incontriamo un heading Markdown prima della chiusura, il '---' iniziale era un separatore, non YAML
+        # If we encounter a Markdown heading before closing '---', the initial line was a divider, not YAML
         if _HEADING_RE.match(lines[idx]):
             return text
     return text
 
 
 def _classify_heading(heading_text: str) -> str | None:
-    """Restituisce la chiave di sezione ('todo', 'ideas', 'notes', 'links') se l'heading
-    corrisponde a una delle sezioni della Daily Note, altrimenti None.
-    """
-    # Rimuove emoji e punteggiatura mantenendo solo lettere/numeri
+    """Return canonical section key ('todo', 'ideas', 'notes', 'links') or None."""
+    # Strip emojis and punctuation, leaving letters and numbers
     cleaned = re.sub(r"[^\w\s]", " ", heading_text, flags=re.UNICODE).strip().lower()
     cleaned = re.sub(r"\s+", " ", cleaned)
     tokens = cleaned.split()
@@ -61,16 +59,16 @@ def _classify_heading(heading_text: str) -> str | None:
 
 
 def has_meaningful_content(text: str) -> bool:
-    """Verifica se una sezione o un elemento contiene almeno un carattere alfanumerico utile.
+    """Check whether a section or item contains at least one meaningful alphanumeric character.
 
-    Evita che righe con soli bullet vuoti ('- ', '* ', '- [ ]', '[x]') o separatori ('---')
-    vengano passate all'LLM causando allucinazioni (Bug #1).
+    Prevents lines with only empty bullets ('- ', '* ', '- [ ]', '[x]') or dividers ('---')
+    from being processed.
     """
     if not text:
         return False
     cleaned = _HTML_COMMENT_RE.sub("", text)
     cleaned = _HR_RE.sub("", cleaned)
-    # Rimuove checkbox vuote e marcatori di lista prima di controllare
+    # Remove empty checkboxes and list markers
     cleaned = re.sub(
         r"^\s*(?:(?:[*+-]|\d+[.)])\s*)?(?:\[[ xX]?\]\s*)?",
         "",
@@ -81,12 +79,10 @@ def has_meaningful_content(text: str) -> bool:
 
 
 def parse_daily_sections(content: str) -> dict[str, str]:
-    """Suddivide la Daily Note nelle 4 sezioni canoniche: todo, ideas, notes, links.
+    """Split Daily Note into the 4 canonical sections: todo, ideas, notes, links.
 
-    A differenza di una regex dot-all fragile:
-    - Si ferma correttamente alla sezione successiva anche se la corrente è vuota.
-    - Non viene ingannata da sotto-titoli generici (es. '### Herolapse') dentro una sezione,
-      oppure li ignora/preserva come contesto senza far tracimare i link nelle note (Bug #2).
+    - Properly stops at the next section even if the current one is empty.
+    - Preserves unrecognised subheadings (e.g. '### Subtitle') without overflowing links into notes.
     """
     sections: dict[str, list[str]] = {
         "todo": [],
@@ -110,7 +106,7 @@ def parse_daily_sections(content: str) -> dict[str, str]:
             if matched_section is not None:
                 current_section = matched_section
                 continue
-            # Sottotitolo non riconosciuto dentro Links: lo ignoriamo per non scambiarlo per link
+            # Unknown subheading inside Links: ignore to avoid mistaking it for a link
             if current_section == "links":
                 continue
 
@@ -129,11 +125,11 @@ def parse_daily_sections(content: str) -> dict[str, str]:
 
 
 def split_markdown_items(text: str) -> list[str]:
-    """Divide il testo in blocchi basati su elenchi puntati (-, *, +) o numerati (1., 1)),
-    mantenendo insieme le righe rientrate o consecutive dello stesso punto.
+    """Split text into blocks based on bullet points (-, *, +) or numbers (1., 1)).
 
-    Supporta anche bullet senza spazio iniziale (es. '*Todo') e checkbox ('- [ ] Todo', '[ ] Todo').
-    Filtra automaticamente eventuali punti elenco vuoti.
+    Preserves indented and continuation lines.
+    Supports bullet without leading space (e.g. '*Todo') and checkboxes ('- [ ] Todo', '[ ] Todo').
+    Filters out empty bullets automatically.
     """
     if not has_meaningful_content(text):
         return []
@@ -159,11 +155,10 @@ def split_markdown_items(text: str) -> list[str]:
 
         m_head = _HEADING_RE.match(line)
         if m_head:
-            # Se è un'intestazione canonica (Todo/Ideas/Notes/Links), la ignoriamo
+            # If canonical heading (Todo/Ideas/Notes/Links), ignore it
             if _classify_heading(m_head.group(2)) is not None:
                 continue
-            # Se è un sottotitolo scritto dall'utente (es. "#### Chiamare Marco"),
-            # ne preserviamo il testo come elemento separato
+            # User subheading (e.g. "#### Call Alice"): preserve as separate item
             if current_item:
                 joined = "\n".join(current_item).strip()
                 if has_meaningful_content(joined):
@@ -188,7 +183,7 @@ def split_markdown_items(text: str) -> list[str]:
             if current_item:
                 current_item.append(line)
             elif line.strip() and has_meaningful_content(line):
-                # Testo libero prima di qualsiasi elenco
+                # Free-form text before list items
                 current_item.append(line.strip())
 
     if current_item:
@@ -205,9 +200,7 @@ _URL_TOKEN_RE = re.compile(
 
 
 def is_pure_url_item(text: str) -> bool:
-    """Restituisce True se il testo è costituito esclusivamente da uno o più URL
-    (evita che link finiti per errore in Note/Idee vengano inventati come note).
-    """
+    """Return True if text consists strictly of one or more URLs."""
     tokens = [t.strip("<>()[].,;") for t in text.split() if t.strip("<>()[].,;")]
     if not tokens:
         return False
@@ -215,13 +208,13 @@ def is_pure_url_item(text: str) -> bool:
 
 
 def extract_links_from_section(text: str) -> list[tuple[str, str]]:
-    """Estrae una lista di tuple (url, contesto_opzionale) dalla sezione Links.
+    """Extract list of (url, optional_context) tuples from the Links section.
 
-    Ignora righe che non contengono URL validi o domini riconoscibili (es. sottotitoli).
-    Supporta:
-    - URL nudi all'inizio o a fine riga (es. 'serfsrl.it', 'Sito filtri: https://serfsrl.it')
-    - Bullet senza spazio ('*https://example.com') e checkbox ('- [ ] https://example.com')
-    - Link Markdown '[Titolo](https://example.com)' o '[Titolo](example.com)'
+    Ignores lines without valid URLs or recognizable domains.
+    Supports:
+    - Bare URLs at start or end of line (e.g. 'serfsrl.it', 'Filters site: https://serfsrl.it')
+    - Bullets without space ('*https://example.com') and checkboxes ('- [ ] https://example.com')
+    - Markdown links '[Title](https://example.com)' or '[Title](example.com)'
     """
     if not has_meaningful_content(text):
         return []
@@ -234,14 +227,14 @@ def extract_links_from_section(text: str) -> list[tuple[str, str]]:
         if not line or _HR_RE.match(line) or _HEADING_RE.match(line):
             continue
 
-        # Rimuove bullet iniziale (-, *, +, 1.) e checkbox opzionale ([ ], [x])
+        # Remove leading bullet (-, *, +, 1.) and optional checkbox ([ ], [x])
         line = re.sub(
             r"^(?:(?:[*+-]|\d+[.)])\s*(?:\[[ xX]?\]\s*)?|\[[ xX]?\]\s*)", "", line
         ).strip()
         if not line:
             continue
 
-        # Caso 1: Link in formato Markdown [testo](url)
+        # Case 1: Markdown format [text](url)
         md_match = md_link_re.search(line)
         if md_match:
             label, candidate_url = md_match.group(1).strip(), md_match.group(2).strip("<>")
@@ -251,7 +244,7 @@ def extract_links_from_section(text: str) -> list[tuple[str, str]]:
                 results.append((candidate_url, note))
                 continue
 
-        # Caso 2: Cerca un token URL ovunque nella riga (all'inizio, in mezzo o alla fine)
+        # Case 2: Search for URL token anywhere in the line
         tokens = line.split()
         found_idx: int | None = None
         found_url: str = ""

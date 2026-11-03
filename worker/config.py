@@ -1,16 +1,16 @@
-"""Caricamento della configurazione da file .env e variabili d'ambiente."""
+"""Configuration loading from .env file and environment variables."""
 
 import os
 from dataclasses import dataclass
 
 
 def load_dotenv(dotenv_path: str | None = None) -> None:
-    """Carica le variabili da un file .env in os.environ senza dipendenze esterne.
+    """Load environment variables from a .env file into os.environ with zero dependencies.
 
-    Non sovrascrive variabili già presenti nell'ambiente di sistema.
+    Does not overwrite variables already set in the system environment.
     """
     if dotenv_path is None:
-        # Cerca .env nella directory radice del progetto (accanto al modulo/script)
+        # Look for .env in project root directory (parent of this package)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         dotenv_path = os.path.join(base_dir, ".env")
 
@@ -32,7 +32,7 @@ def load_dotenv(dotenv_path: str | None = None) -> None:
                 key = key.strip()
                 val = val.strip()
 
-                # Rimuove commenti inline se il valore non è quotato
+                # Strip quotes or inline comments
                 if val and val[0] in ('"', "'") and val[-1] == val[0] and len(val) >= 2:
                     val = val[1:-1]
                 elif " #" in val:
@@ -41,12 +41,12 @@ def load_dotenv(dotenv_path: str | None = None) -> None:
                 if key and key not in os.environ:
                     os.environ[key] = val
     except OSError as exc:
-        print(f"[WARN] Impossibile leggere il file .env ({dotenv_path}): {exc}")
+        print(f"[WARN] Unable to read .env file ({dotenv_path}): {exc}")
 
 
 @dataclass(frozen=True)
 class Config:
-    """Configurazione centralizzata del worker Obsidian."""
+    """Centralized configuration for Sblumbo."""
 
     vault_path: str
     todo_file: str
@@ -59,12 +59,13 @@ class Config:
     ollama_timeout: int
     ollama_temperature: float
     ollama_num_predict: int
+    ollama_think: bool
     url_fetch_timeout: int
     git_auto_commit: bool
 
     @classmethod
     def from_env(cls, dotenv_path: str | None = None) -> "Config":
-        """Costruisce l'oggetto Config leggendo .env e variabili d'ambiente."""
+        """Build Config instance by reading .env file and environment variables."""
         load_dotenv(dotenv_path)
 
         raw_vault = os.environ.get("VAULT_PATH", "~/Obsidian")
@@ -103,6 +104,9 @@ class Config:
         except ValueError:
             ollama_num_predict = 512
 
+        ollama_think_raw = os.environ.get("OLLAMA_THINK", "false").strip().lower()
+        ollama_think = ollama_think_raw in ("1", "true", "yes", "on")
+
         try:
             url_fetch_timeout = int(os.environ.get("URL_FETCH_TIMEOUT", "6"))
         except ValueError:
@@ -123,6 +127,7 @@ class Config:
             ollama_timeout=ollama_timeout,
             ollama_temperature=ollama_temperature,
             ollama_num_predict=ollama_num_predict,
+            ollama_think=ollama_think,
             url_fetch_timeout=url_fetch_timeout,
             git_auto_commit=git_auto_commit,
         )

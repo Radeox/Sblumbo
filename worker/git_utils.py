@@ -1,4 +1,4 @@
-"""Operazioni Git e validazione fail-safe del Vault Obsidian."""
+"""Git operations and fail-safe validation for the Obsidian Vault."""
 
 import os
 import shutil
@@ -6,32 +6,32 @@ import subprocess
 
 
 class VaultError(RuntimeError):
-    """Errore sollevato quando il Vault o la nota richiesta non sono validi."""
+    """Raised when the Vault or requested note is invalid."""
 
 
 def validate_vault(vault_path: str) -> None:
-    """Verifica che la directory del Vault esista, sia una directory e sia scrivibile."""
+    """Verify that the Vault directory exists, is a directory, and is writable."""
     if not vault_path:
-        raise VaultError("VAULT_PATH non è configurato.")
+        raise VaultError("VAULT_PATH is not configured.")
     if not os.path.exists(vault_path):
-        raise VaultError(f"Il Vault Obsidian non esiste al percorso: {vault_path}")
+        raise VaultError(f"Obsidian Vault does not exist at path: {vault_path}")
     if not os.path.isdir(vault_path):
-        raise VaultError(f"Il percorso del Vault non è una directory: {vault_path}")
+        raise VaultError(f"Vault path is not a directory: {vault_path}")
     if not os.access(vault_path, os.R_OK | os.W_OK):
         raise VaultError(
-            f"Permessi insufficienti (lettura/scrittura) sul Vault: {vault_path}"
+            f"Insufficient permissions (read/write) on Vault: {vault_path}"
         )
 
 
 def resolve_daily_note_path(
     raw_arg: str | None, daily_dir: str, vault_path: str
 ) -> str:
-    """Risolve e valida il percorso della Daily Note.
+    """Resolve and validate the Daily Note path.
 
-    Accetta:
-    - Un percorso diretto al file `.md`
-    - Solo il nome del file o la data (es. `2026-11-02` o `2026-11-02.md`), cercandolo in `DAILY_DIR`
-    - `None` (nessun argomento): cerca automaticamente la nota di oggi in `DAILY_DIR`
+    Accepts:
+    - Direct path to the `.md` file
+    - Filename or date alone (e.g. `2026-11-02` or `2026-11-02.md`), searched in `DAILY_DIR`
+    - `None` (no argument): automatically finds today's note in `DAILY_DIR`
     """
     from datetime import datetime
 
@@ -45,7 +45,7 @@ def resolve_daily_note_path(
         candidates.append(os.path.abspath(expanded))
         if not expanded.endswith(".md"):
             candidates.append(os.path.abspath(f"{expanded}.md"))
-        # Prova anche dentro DAILY_DIR e VAULT_PATH
+        # Also check inside DAILY_DIR and VAULT_PATH
         basename = os.path.basename(expanded)
         candidates.append(os.path.join(daily_dir, basename))
         if not basename.endswith(".md"):
@@ -56,25 +56,25 @@ def resolve_daily_note_path(
         if os.path.exists(candidate):
             if os.path.isdir(candidate):
                 raise VaultError(
-                    f"Il percorso specificato è una directory, non una nota: {candidate}"
+                    f"Specified path is a directory, not a note: {candidate}"
                 )
             if not os.access(candidate, os.R_OK):
                 raise VaultError(
-                    f"Impossibile leggere la nota (permessi negati): {candidate}"
+                    f"Cannot read note (permission denied): {candidate}"
                 )
-            # Evita di processare ed eliminare per errore il file indice della cartella Daily (es. Daily/Daily.md)
+            # Avoid processing and deleting the Daily folder index file (e.g. Daily/Daily.md)
             if os.path.basename(candidate).lower() == "daily.md":
                 raise VaultError(
-                    f"'{candidate}' è il file indice della cartella Daily, non una Daily Note giornaliera."
+                    f"'{candidate}' is the Daily folder index file, not a daily note."
                 )
             return candidate
 
     searched = ", ".join(dict.fromkeys(candidates))
-    raise VaultError(f"Nota giornaliera non trovata (percorsi cercati: {searched})")
+    raise VaultError(f"Daily note not found (searched paths: {searched})")
 
 
 def ensure_vault_gitignore(vault_path: str, entries_to_ignore: tuple[str, ...] = (".stversions", ".stfolder")) -> None:
-    """Assicura che le cartelle di versioning di Syncthing siano presenti nel .gitignore del Vault."""
+    """Ensure Syncthing versioning and folder markers are present in the Vault's .gitignore."""
     gitignore_path = os.path.join(vault_path, ".gitignore")
     existing_lines: set[str] = set()
 
@@ -104,17 +104,17 @@ def git_commit(
     message: str,
     paths_to_stage: list[str] | None = None,
 ) -> bool:
-    """Esegue lo stage e il commit nel Vault Obsidian in modo sicuro.
+    """Stage changes and commit in the Obsidian Vault safely.
 
-    Restituisce True se un commit è stato effettivamente creato, False altrimenti.
+    Returns True if a commit was made, False otherwise.
     """
     if shutil.which("git") is None:
-        print("[WARN] Comando 'git' non trovato nel PATH. Commit saltato.")
+        print("[WARN] 'git' command not found in PATH. Skipping commit.")
         return False
 
     git_dir = os.path.join(vault_path, ".git")
     if not os.path.exists(git_dir):
-        print(f"[WARN] Il Vault '{vault_path}' non è un repository Git. Commit saltato.")
+        print(f"[WARN] Vault '{vault_path}' is not a Git repository. Skipping commit.")
         return False
 
     ensure_vault_gitignore(vault_path)
@@ -145,8 +145,7 @@ def git_commit(
                 check=True,
             )
         if deleted_rel_paths:
-            # Usa 'git rm --ignore-unmatch' così se la Daily Note eliminata non era
-            # ancora tracciata da Git non fallisce con exit status 128.
+            # Use 'git rm --ignore-unmatch' so an untracked deleted daily note does not fail with code 128
             subprocess.run(
                 ["git", "rm", "--quiet", "--ignore-unmatch", "--"] + deleted_rel_paths,
                 cwd=vault_path,
@@ -155,14 +154,14 @@ def git_commit(
     else:
         subprocess.run(["git", "add", "-A"], cwd=vault_path, check=True)
 
-    # Verifica se ci sono modifiche nell'area di staging prima di chiamare git commit
+    # Check for staged changes before committing
     diff_check = subprocess.run(
         ["git", "diff", "--cached", "--quiet"],
         cwd=vault_path,
         check=False,
     )
     if diff_check.returncode == 0:
-        print("[INFO] Nessuna modifica da committare nel Vault.")
+        print("[INFO] No changes to commit in Vault.")
         return False
 
     subprocess.run(
