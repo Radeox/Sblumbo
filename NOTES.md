@@ -1,2 +1,0 @@
-- Se non ci sono note in una categoria qwen allucina e crea cose extra
-- E' capitato che una lista di link (e altre categorie vuote) abbia creato entry anche in idee e note
