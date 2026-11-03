@@ -269,6 +269,19 @@ class TestBugReproductionAndProcessors(unittest.TestCase):
         self.assertIn("- [ ] First task #2026-11-02", content)
         self.assertIn("- [ ] Second task #2026-11-02", content)
 
+    @patch("worker.processors.query_ollama")
+    def test_todo_capitalization_in_process_todos(self, mock_ollama) -> None:
+        """Tasks with lowercase letters must be capitalized when saved to Tasks.md."""
+        mock_ollama.return_value = {
+            "tasks": ["ritirare sensori in farmacia", "comprare il pane"]
+        }
+        count = process_todos("* un punto qualsiasi", "2026-11-02", self.config)
+        self.assertEqual(count, 2)
+        with open(self.config.todo_file, "r", encoding="utf-8") as f:
+            content = f.read()
+        self.assertIn("- [ ] Ritirare sensori in farmacia #2026-11-02", content)
+        self.assertIn("- [ ] Comprare il pane #2026-11-02", content)
+
     def test_git_commit_with_untracked_deleted_daily_note(self) -> None:
         """Bug #2: When the Daily Note was not tracked by Git and gets removed by os.remove(),
         git_commit must NOT fail with exit status 128.

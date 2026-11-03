@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from worker.config import Config
 from worker.telegram import (
+    clean_summary,
     extract_pending_todos,
     format_telegram_message,
     generate_morning_briefing,
@@ -89,6 +90,34 @@ class TestExtractPendingTodos(unittest.TestCase):
         with open(self.tasks_path, "w", encoding="utf-8") as f:
             f.write("- [x] Done 1\n- [x] Done 2\n")
         self.assertEqual(extract_pending_todos(self.tasks_path), [])
+
+    def test_extract_and_capitalize_lowercase_tasks(self) -> None:
+        content = (
+            "- [ ] ritirare sensori in farmacia borgo #2026-11-03\n"
+            "- [ ] comprare il pane\n"
+        )
+        with open(self.tasks_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        todos = extract_pending_todos(self.tasks_path)
+        self.assertEqual(todos, ["Ritirare sensori in farmacia borgo", "Comprare il pane"])
+
+    def test_clean_summary_removes_robotic_prefixes(self) -> None:
+        self.assertEqual(
+            clean_summary("Ecco una panoramica tranquilla delle attività da svolgere oggi: ritirare sensori."),
+            "Ritirare sensori.",
+        )
+        self.assertEqual(
+            clean_summary("Riepilogo della giornata: configurare Telegram e fare la spesa."),
+            "Configurare Telegram e fare la spesa.",
+        )
+        self.assertEqual(
+            clean_summary("Ecco un riepilogo delle attività: sistemare i documenti."),
+            "Sistemare i documenti.",
+        )
+        self.assertEqual(
+            clean_summary("giornata tranquilla dedicata a commissioni."),
+            "Giornata tranquilla dedicata a commissioni.",
+        )
 
 
 class TestMorningBriefingFormatting(unittest.TestCase):

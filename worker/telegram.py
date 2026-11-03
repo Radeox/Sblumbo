@@ -11,7 +11,7 @@ from typing import Any
 
 from .config import Config
 from .ollama_client import query_ollama
-from .parser import has_meaningful_content
+from .parser import capitalize_first, has_meaningful_content
 from .prompts import MORNING_RECAP_PROMPT, MORNING_RECAP_SCHEMA
 
 
@@ -21,10 +21,27 @@ _UNCHECKED_TASK_RE = re.compile(
 
 
 def clean_task_display(task: str) -> str:
-    """Strip date tags (#YYYY-MM-DD, 📅 YYYY-MM-DD) and clean task text for display."""
+    """Strip date tags (#YYYY-MM-DD, 📅 YYYY-MM-DD) and clean/capitalize task text for display."""
     cleaned = re.sub(r"\s*(?:📅\s*#?|#)\d{4}-\d{2}-\d{2}\b", "", task)
-    cleaned = re.sub(r"\s+#\d{4}-\d{1,2}\b", "", cleaned)
-    return cleaned.strip()
+    cleaned = re.sub(r"\s+#\d{4}-\d{1,2}\b", "", cleaned).strip()
+    return capitalize_first(cleaned)
+
+
+def clean_summary(summary: str) -> str:
+    """Clean robotic boilerplate prefixes from the summary and ensure capitalization."""
+    if not summary:
+        return ""
+    cleaned = summary.strip()
+    # Strip common robotic prefixes like:
+    # "Ecco una panoramica (tranquilla|generale|delle attività)?...: "
+    # "Ecco un riepilogo...: "
+    # "Riepilogo della giornata: "
+    pattern = (
+        r"^(?:Ecco\s+(?:una\s+|un\s+|il\s+)?(?:panoramica|riepilogo|sintesi|quadro)[\w\s]*:\s*"
+        r"|Riepilogo(?:\s+della\s+giornata)?:\s*)"
+    )
+    cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+    return capitalize_first(cleaned) if cleaned else summary.strip()
 
 
 def extract_pending_todos(tasks_path: str) -> list[str]:
@@ -89,7 +106,7 @@ def generate_morning_briefing(todos: list[str], config: Config) -> dict[str, Any
             config=config,
             json_schema=MORNING_RECAP_SCHEMA,
         )
-        summary = str(data.get("summary", "")).strip()
+        summary = clean_summary(str(data.get("summary", "")).strip())
         raw_cats = data.get("categories", [])
         categories: list[dict[str, Any]] = []
 
@@ -98,7 +115,8 @@ def generate_morning_briefing(todos: list[str], config: Config) -> dict[str, Any
                 if isinstance(cat, dict):
                     title = str(cat.get("title", "")).strip() or "General"
                     emoji = str(cat.get("emoji", "")).strip() or "📋"
-                    tasks = [str(t).strip() for t in cat.get("tasks", []) if t]
+                    tasks = [clean_task_display(str(t).strip()) for t in cat.get("tasks", []) if t]
+                    tasks = [t for t in tasks if t]
                     if tasks:
                         categories.append({"title": title, "emoji": emoji, "tasks": tasks})
 
@@ -106,7 +124,7 @@ def generate_morning_briefing(todos: list[str], config: Config) -> dict[str, Any
             categories = [{"title": "Pending Tasks", "emoji": "📋", "tasks": todos}]
 
         return {
-            "summary": summary or "Ecco il riepilogo delle attività in sospeso.",
+            "summary": summary or "Riepilogo delle attività in sospeso per oggi.",
             "categories": categories,
         }
     except Exception as exc:
@@ -129,7 +147,7 @@ def format_telegram_message(briefing: dict[str, Any] | None, total_count: int) -
 
     lines: list[str] = [header]
 
-    summary = briefing.get("summary", "").strip()
+    summary = clean_summary(briefing.get("summary", ""))
     if summary:
         safe_summary = html.escape(summary)
         lines.append(f"💡 <b>Today's Focus:</b>\n{safe_summary}\n")

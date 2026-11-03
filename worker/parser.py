@@ -261,3 +261,12 @@ def extract_links_from_section(text: str) -> list[tuple[str, str]]:
             results.append((found_url, context))
 
     return results
+
+
+def capitalize_first(text: str) -> str:
+    """Capitalize the first alphabetical character without altering the rest of the text."""
+    for i, char in enumerate(text):
+        if char.isalpha():
+            return text[:i] + char.upper() + text[i + 1:]
+    return text
+

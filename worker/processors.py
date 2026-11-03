@@ -6,6 +6,7 @@ import re
 from .config import Config
 from .ollama_client import query_ollama
 from .parser import (
+    capitalize_first,
     extract_links_from_section,
     has_meaningful_content,
     is_pure_url_item,
@@ -98,13 +99,13 @@ def _clean_placeholder_wikilinks(body: str) -> str:
 
 
 def _clean_task_line(raw: str) -> str:
-    """Clean a single task line by stripping bullets, checkboxes, or redundant date tags."""
+    """Clean a single task line by stripping bullets, checkboxes, date tags, and capitalizing."""
     cleaned = re.sub(
         r"^\s*(?:(?:[-*+]|\d+[.)])\s*)?(?:\[[ xX]?\]\s*)?", "", raw
     ).strip()
     # Remove any trailing date tag already added
     cleaned = re.sub(r"\s+#\d{4}-\d{2}-\d{2}\s*$", "", cleaned).strip()
-    return cleaned
+    return capitalize_first(cleaned)
 
 
 def _is_hallucinated_task(task: str) -> bool:
