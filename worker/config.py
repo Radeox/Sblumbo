@@ -4,15 +4,17 @@ import os
 from dataclasses import dataclass
 
 
-def load_dotenv(dotenv_path: str | None = None) -> None:
+def load_dotenv(dotenv_path: str | None = None, override: bool = False) -> None:
     """Load environment variables from a .env file into os.environ with zero dependencies.
 
-    Does not overwrite variables already set in the system environment.
+    If dotenv_path is explicitly provided, values overwrite existing environment variables.
     """
     if dotenv_path is None:
         # Look for .env in project root directory (parent of this package)
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         dotenv_path = os.path.join(base_dir, ".env")
+    else:
+        override = True
 
     if not os.path.isfile(dotenv_path):
         return
@@ -38,7 +40,7 @@ def load_dotenv(dotenv_path: str | None = None) -> None:
                 elif " #" in val:
                     val = val.split(" #", 1)[0].strip()
 
-                if key and key not in os.environ:
+                if key and (override or key not in os.environ):
                     os.environ[key] = val
     except OSError as exc:
         print(f"[WARN] Unable to read .env file ({dotenv_path}): {exc}")
@@ -62,6 +64,8 @@ class Config:
     ollama_think: bool
     url_fetch_timeout: int
     git_auto_commit: bool
+    telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
 
     @classmethod
     def from_env(cls, dotenv_path: str | None = None) -> "Config":
@@ -115,6 +119,9 @@ class Config:
         git_auto_commit_raw = os.environ.get("GIT_AUTO_COMMIT", "true").strip().lower()
         git_auto_commit = git_auto_commit_raw in ("1", "true", "yes", "on")
 
+        telegram_bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+
         return cls(
             vault_path=vault_path,
             todo_file=todo_file,
@@ -130,4 +137,6 @@ class Config:
             ollama_think=ollama_think,
             url_fetch_timeout=url_fetch_timeout,
             git_auto_commit=git_auto_commit,
+            telegram_bot_token=telegram_bot_token,
+            telegram_chat_id=telegram_chat_id,
         )

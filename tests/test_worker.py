@@ -11,7 +11,6 @@ from unittest.mock import patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import sblumbo
-import obsidian_worker
 from worker.config import Config, load_dotenv
 from worker.git_utils import (
     VaultError,

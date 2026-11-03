@@ -21,12 +21,14 @@ Starting from an Obsidian Daily Note structured across 4 sections (`Todo`, `Idea
 ```text
 sblumbo/
 ├── sblumbo.py              # Main CLI entry point and fail-safe orchestration
+├── telegram_bot.py         # SblumBot: Telegram morning task briefing worker
 ├── .env                    # Local configuration (ignored by Git)
 ├── .env.example            # Configuration template
 ├── .gitignore              # Git ignore rules
 ├── README.md               # Project documentation
 ├── tests/
-│   └── test_worker.py      # Comprehensive edge-case test suite
+│   ├── test_worker.py      # Sblumbo edge-case test suite
+│   └── test_telegram_bot.py # SblumBot Telegram briefing test suite
 └── worker/                 # Core package modules
     ├── __init__.py         # Public package exports
     ├── config.py           # Zero-dependency .env loader and Config dataclass
@@ -35,6 +37,7 @@ sblumbo/
     ├── ollama_client.py    # HTTP client for Ollama and pre-flight health-check
     ├── scraper.py          # HTML metadata scraper (<title>, OpenGraph, description)
     ├── processors.py       # Section processors, anti-collision, and YAML sanitization
+    ├── telegram.py         # Telegram message formatting, task extraction & API dispatch
     └── git_utils.py        # Vault validation, note resolution, and safe Git commits
 ```
 
@@ -64,10 +67,33 @@ cp .env.example .env
 | `OLLAMA_THINK`       | `false`                           | Disable/enable thinking traces for reasoning models (e.g., `qwen3:4b`).|
 | `URL_FETCH_TIMEOUT`  | `6`                               | Timeout in seconds for webpage metadata scraping.                      |
 | `GIT_AUTO_COMMIT`    | `true`                            | If `true`, automatically commits changes to the Vault after ingestion. |
+| `TELEGRAM_BOT_TOKEN` | `""`                              | Telegram Bot API token for SblumBot notifications.                     |
+| `TELEGRAM_CHAT_ID`   | `""`                              | Telegram Chat ID where morning briefings are delivered.                |
 
 ---
 
-## 🚀 Usage
+## 🤖 SblumBot: Telegram Morning Briefing (`telegram_bot.py`)
+
+A standalone morning worker that extracts all remaining unchecked tasks from `Tasks.md`, asks Qwen to produce a high-level focus summary, groups tasks under categorized headings with emojis, and delivers a formatted briefing directly to your Telegram chat.
+
+### Usage
+```bash
+# Preview briefing in terminal without sending to Telegram
+python3 telegram_bot.py --dry-run
+
+# Run and send morning briefing to Telegram
+python3 telegram_bot.py
+
+# Skip Ollama recap and send categorized task list directly
+python3 telegram_bot.py --no-ai
+
+# Silent mode: do nothing if all tasks are completed
+python3 telegram_bot.py --quiet-if-empty
+```
+
+---
+
+## 🚀 Sblumbo: Daily Note Ingestion Usage
 
 Sblumbo requires no external Python packages (runs on standard Python 3.10+). Ensure `ollama` is running and the configured model is pulled (`ollama pull qwen2.5:3b`).
 
@@ -115,11 +141,11 @@ The project includes an automated test suite in `tests/test_worker.py` (built on
 # Run all tests with verbose output
 python3 -m unittest discover -s tests -v
 
-# Or run the test file directly
-python3 tests/test_worker.py
+# Run only SblumBot Telegram tests
+python3 -m unittest tests/test_telegram_bot.py -v
 
-# Run a specific test class (e.g. parser edge cases)
-python3 -m unittest tests.test_worker.TestParserEdgeCases -v
+# Run only Sblumbo ingestion tests
+python3 -m unittest tests/test_worker.py -v
 ```
 
 ---
