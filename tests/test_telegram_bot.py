@@ -70,9 +70,11 @@ class TestExtractPendingTodos(unittest.TestCase):
 
         todos = extract_pending_todos(self.tasks_path)
         self.assertEqual(len(todos), 3)
-        self.assertIn("Pending task 1 #2026-11-02", todos)
+        self.assertIn("Pending task 1", todos)
         self.assertIn("Pending task 2 with bullet", todos)
-        self.assertIn("Pending task 3 #2026-11-03", todos)
+        self.assertIn("Pending task 3", todos)
+        # Ensure date tags are stripped
+        self.assertFalse(any("#2026" in t for t in todos))
 
     def test_empty_or_nonexistent_file(self) -> None:
         # File doesn't exist
@@ -130,9 +132,9 @@ class TestMorningBriefingFormatting(unittest.TestCase):
             "summary": "Focus on high priority client work today.",
             "categories": [
                 {
-                    "title": "Urgent",
-                    "emoji": "⚡",
-                    "tasks": ["Fix production bug & deploy <hotfix>"],
+                    "title": "⚡ Work Projects",
+                    "emoji": "💼",
+                    "tasks": ["Fix production bug & deploy <hotfix> #2026-11-03"],
                 },
                 {
                     "title": "Errands",
@@ -142,12 +144,18 @@ class TestMorningBriefingFormatting(unittest.TestCase):
             ],
         }
         msg = format_telegram_message(briefing, total_count=2)
-        # Verify bot identity header
-        self.assertIn("SblumBot", msg)
+        # Verify notebook header and bot identity
+        self.assertIn("📓 <b>SblumBot — Morning Briefing</b>", msg)
+        # Verify date line and total count are excluded as requested
+        self.assertNotIn("Total Pending", msg)
+        self.assertNotIn("Tuesday", msg)
         # Verify HTML escaping for special characters (&, <, >)
         self.assertIn("&amp;", msg)
         self.assertIn("&lt;hotfix&gt;", msg)
-        self.assertIn("⚡ <b>Urgent</b>", msg)
+        # Verify date tag is stripped from task
+        self.assertNotIn("#2026-11-03", msg)
+        # Verify leading emoji is not duplicated
+        self.assertIn("💼 <b>Work Projects</b>", msg)
         self.assertIn("🛒 <b>Errands</b>", msg)
         self.assertIn("Focus on high priority client work today.", msg)
 

@@ -20,10 +20,18 @@ _UNCHECKED_TASK_RE = re.compile(
 )
 
 
+def clean_task_display(task: str) -> str:
+    """Strip date tags (#YYYY-MM-DD, 📅 YYYY-MM-DD) and clean task text for display."""
+    cleaned = re.sub(r"\s*(?:📅\s*#?|#)\d{4}-\d{2}-\d{2}\b", "", task)
+    cleaned = re.sub(r"\s+#\d{4}-\d{1,2}\b", "", cleaned)
+    return cleaned.strip()
+
+
 def extract_pending_todos(tasks_path: str) -> list[str]:
     """Read Tasks.md and extract only unchecked pending tasks (- [ ]).
 
     Filters out completed tasks (- [x]), empty checkboxes, headers, comments, and frontmatter.
+    Strips date tags so downstream consumers receive clean task descriptions.
     """
     if not os.path.isfile(tasks_path):
         return []
@@ -54,8 +62,9 @@ def extract_pending_todos(tasks_path: str) -> list[str]:
         m = _UNCHECKED_TASK_RE.match(raw_line)
         if m:
             task_text = m.group(1).strip()
-            if has_meaningful_content(task_text):
-                pending.append(task_text)
+            cleaned_task = clean_task_display(task_text)
+            if has_meaningful_content(cleaned_task):
+                pending.append(cleaned_task)
 
     return pending
 
@@ -110,7 +119,7 @@ def generate_morning_briefing(todos: list[str], config: Config) -> dict[str, Any
 
 def format_telegram_message(briefing: dict[str, Any] | None, total_count: int) -> str:
     """Format the morning briefing into a Telegram HTML message."""
-    header = "🤖 <b>SblumBot — Morning Briefing</b>\n"
+    header = "📓 <b>SblumBot — Morning Briefing</b>\n"
 
     if total_count == 0 or not briefing or not briefing.get("categories"):
         return (
@@ -118,12 +127,7 @@ def format_telegram_message(briefing: dict[str, Any] | None, total_count: int) -
             "🎉 <i>No pending tasks! All caught up for today.</i>"
         )
 
-    date_str = datetime.now().strftime("%A, %d %b %Y")
-    lines: list[str] = [
-        header,
-        f"📅 <i>{date_str}</i>",
-        f"📊 <b>Total Pending:</b> {total_count}\n",
-    ]
+    lines: list[str] = [header]
 
     summary = briefing.get("summary", "").strip()
     if summary:
@@ -131,15 +135,29 @@ def format_telegram_message(briefing: dict[str, Any] | None, total_count: int) -
         lines.append(f"💡 <b>Today's Focus:</b>\n{safe_summary}\n")
 
     for cat in briefing.get("categories", []):
-        emoji = cat.get("emoji", "📋")
-        title = html.escape(cat.get("title", "Tasks"))
+        raw_emoji = str(cat.get("emoji", "")).strip()
+        raw_title = str(cat.get("title", "Tasks")).strip()
+
+        # Strip any leading emoji from title to avoid duplicate symbols (e.g. 💼 💼 Work)
+        cleaned_title = re.sub(
+            r"^[\U00010000-\U0010ffff\u2600-\u27bf\u2300-\u23ff\s]+",
+            "",
+            raw_title,
+        ).strip()
+        if not cleaned_title:
+            cleaned_title = raw_title
+
+        safe_title = html.escape(cleaned_title)
+        emoji = raw_emoji or "📓"
         tasks = cat.get("tasks", [])
         if not tasks:
             continue
 
-        lines.append(f"{emoji} <b>{title}</b>")
+        lines.append(f"{emoji} <b>{safe_title}</b>")
         for t in tasks:
-            lines.append(f"• {html.escape(t)}")
+            clean_t = clean_task_display(str(t).strip())
+            if clean_t:
+                lines.append(f"• {html.escape(clean_t)}")
         lines.append("")
 
     return "\n".join(lines).strip()
