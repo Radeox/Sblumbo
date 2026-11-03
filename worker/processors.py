@@ -29,7 +29,10 @@ _HALLUCINATED_PHRASES = (
     "restituisci frasi concise all'infinito",
     "identifica e estrai tutte le azioni",
     "sei un assistente per la gestione",
+    "sei un assistente che riformula",
     "sei un estrattore rigoroso",
+    "ogni punto fornito dall'utente deve produrre",
+    "non ripetere mai queste istruzioni",
 )
 
 
@@ -95,21 +98,46 @@ def _clean_placeholder_wikilinks(body: str) -> str:
     return cleaned.strip()
 
 
+def _clean_task_line(raw: str) -> str:
+    """Pulisce una singola riga di task da bullet, checkbox o tag data ridondanti."""
+    cleaned = re.sub(
+        r"^\s*(?:(?:[-*+]|\d+[.)])\s*)?(?:\[[ xX]?\]\s*)?", "", raw
+    ).strip()
+    # Rimuove eventuale tag data finale già aggiunto dal modello
+    cleaned = re.sub(r"\s+#\d{4}-\d{2}-\d{2}\s*$", "", cleaned).strip()
+    return cleaned
+
+
 def _is_hallucinated_task(task: str) -> bool:
-    """Rileva se un task generato è in realtà una ripetizione del prompt di sistema."""
+    """Rileva se un task generato è in realtà vuoto o una ripetizione del prompt di sistema."""
     low = task.strip().lower()
-    if not low or len(low) < 2:
+    if not has_meaningful_content(low):
         return True
     return any(phrase in low for phrase in _HALLUCINATED_PHRASES)
 
 
 def process_todos(text: str, source_date: str, config: Config) -> int:
-    """Estrae e salva i Todo nel file Tasks.md del Vault."""
-    items = split_markdown_items(text)
-    if not items:
+    """Estrae e salva i Todo nel file Tasks.md del Vault.
+
+    Include un fallback deterministico ai punti originali dell'utente se l'LLM
+    restituisce una lista vuota o perde degli elementi.
+    """
+    raw_items = split_markdown_items(text)
+    if not raw_items:
         return 0
 
-    clean_input = "\n".join(f"- {item}" for item in items)
+    # Ogni riga significativa nella sezione Todo costituisce almeno un punto da non perdere
+    todo_lines: list[str] = []
+    for item in raw_items:
+        for line in item.splitlines():
+            cleaned_line = _clean_task_line(line)
+            if has_meaningful_content(cleaned_line):
+                todo_lines.append(cleaned_line)
+
+    if not todo_lines:
+        return 0
+
+    clean_input = "\n".join(f"- {line}" for line in todo_lines)
 
     parsed = query_ollama(
         [
@@ -122,19 +150,33 @@ def process_todos(text: str, source_date: str, config: Config) -> int:
 
     raw_tasks = parsed.get("tasks", [])
     if not isinstance(raw_tasks, list):
-        return 0
+        raw_tasks = []
 
     valid_tasks: list[str] = []
-    for t in raw_tasks:
-        if not isinstance(t, str):
+    for entry in raw_tasks:
+        if isinstance(entry, dict):
+            # Tolleranza se il modello restituisce oggetti {"task": "..."}
+            candidate = str(
+                entry.get("task")
+                or entry.get("title")
+                or entry.get("action")
+                or entry.get("description")
+                or ""
+            )
+        elif isinstance(entry, str):
+            candidate = entry
+        else:
             continue
-        # Rimuove eventuale "- [ ] " se il modello l'ha incluso nel testo del task
-        cleaned_t = re.sub(r"^\s*([-*+]|\d+\.)?\s*(\[[ xX]?\]\s*)?", "", t).strip()
-        if cleaned_t and not _is_hallucinated_task(cleaned_t):
-            valid_tasks.append(cleaned_t)
 
-    if not valid_tasks:
-        return 0
+        for subline in candidate.splitlines():
+            cleaned_t = _clean_task_line(subline)
+            if cleaned_t and not _is_hallucinated_task(cleaned_t):
+                valid_tasks.append(cleaned_t)
+
+    # Fallback deterministico: se il modello ha restituito [] o meno task dei punti
+    # scritti dall'utente, usiamo direttamente le righe pulite dell'utente.
+    if len(valid_tasks) < len(todo_lines):
+        valid_tasks = todo_lines
 
     todo_dir = os.path.dirname(config.todo_file)
     if todo_dir:

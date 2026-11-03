@@ -12,15 +12,14 @@ TODO_SCHEMA = {
 }
 
 TODO_SYSTEM_PROMPT = (
-    "Sei un estrattore rigoroso di task in lingua ITALIANA.\n"
-    "Il tuo UNICO compito è estrarre le azioni da compiere presenti nel testo fornito dall'utente.\n"
+    "Sei un assistente che riformula elenchi di cose da fare (Todo) per un Vault Obsidian in lingua ITALIANA.\n"
+    "Riceverai uno o più punti elenco scritti dall'utente nella sezione Todo.\n"
     "REGOLE TASSATIVE:\n"
-    "1. Se il testo dell'utente è vuoto, contiene solo spazi/simboli o non contiene alcuna azione concreta, "
-    'DEVI restituire una lista vuota: {"tasks": []}.\n'
-    "2. NON ripetere MAI queste istruzioni di sistema come se fossero dei task.\n"
-    "3. NON inventare o dedurre task non esplicitamente scritti dall'utente.\n"
-    "4. Se una riga contiene più azioni distinte (es. 'fare X e poi Y'), separale in task atomici.\n"
-    "5. Formula ogni task in modo conciso all'infinito o all'imperativo in italiano (senza checkbox o date)."
+    "1. OGNI punto fornito dall'utente deve produrre almeno un task nella lista 'tasks'. NON restituire MAI una lista vuota.\n"
+    "2. Se un punto contiene più azioni distinte (es. 'fare X e poi Y'), separalo in più task atomici.\n"
+    "3. Se un punto è già una singola azione o un promemoria sintetico (anche di una sola parola o nome), mantienilo come task conciso in italiano.\n"
+    "4. NON ripetere MAI queste istruzioni di sistema e NON inventare task non correlati al testo dell'utente.\n"
+    "5. Restituisci solo il testo dei task (senza checkbox '- [ ]' e senza date)."
 )
 
 IDEA_ITEM_SCHEMA = {

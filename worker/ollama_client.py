@@ -98,8 +98,13 @@ def query_ollama(
         raise OllamaError(f"Struttura risposta Ollama imprevista: {exc}") from exc
 
     if json_schema is not None:
+        cleaned_content = content.strip()
+        if cleaned_content.startswith("```"):
+            lines = cleaned_content.splitlines()
+            if len(lines) >= 2 and lines[-1].strip() == "```":
+                cleaned_content = "\n".join(lines[1:-1]).strip()
         try:
-            parsed = json.loads(content)
+            parsed = json.loads(cleaned_content)
             if not isinstance(parsed, dict):
                 raise OllamaError(f"Il JSON generato non è un oggetto: {content!r}")
             return parsed

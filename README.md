@@ -25,6 +25,8 @@ obsidian_worker/
 ├── .env.example            # Template di configurazione
 ├── .gitignore              # Esclusioni Git
 ├── README.md               # Documentazione del progetto
+├── tests/
+│   └── test_worker.py      # Suite di test per parser, processori, git e edge case
 └── worker/                 # Pacchetto sottomoduli
     ├── __init__.py         # Esportazioni pubbliche del pacchetto
     ├── config.py           # Loader .env zero-dependency e dataclass Config
@@ -94,6 +96,23 @@ Altre flag utili:
 - `--keep-daily`: elabora la nota ma **non** la elimina al termine.
 - `--no-commit`: elabora la nota ma salta il commit Git nel Vault.
 - `--env-file /percorso/custom.env`: usa un file `.env` alternativo.
+
+---
+
+## 🧪 Testing (Edge Cases)
+
+Il progetto include una suite di test automatici in `tests/test_worker.py` (basata su `unittest` della standard library, non richiede dipendenze esterne né Ollama attivo).
+
+```bash
+# Esegue tutti i test con output dettagliato
+python3 -m unittest discover -s tests -v
+
+# Oppure direttamente tramite il file di test
+python3 tests/test_worker.py
+
+# Esegue una singola classe di test (es. solo gli edge case del parser)
+python3 -m unittest tests.test_worker.TestParserEdgeCases -v
+```
 
 ---
 

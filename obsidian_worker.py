@@ -159,6 +159,10 @@ def main() -> int:
             if todos_count:
                 touched_paths.append(config.todo_file)
                 print(f"  -> Todo estratti: {todos_count}")
+            else:
+                errors.append(
+                    "Sezione Todo: nessun task estratto da una sezione non vuota."
+                )
         except Exception as exc:
             errors.append(f"Sezione Todo: {exc}")
 
@@ -166,9 +170,13 @@ def main() -> int:
     if sections["ideas"]:
         try:
             ideas_files = process_ideas(sections["ideas"], source_date, config)
-            touched_paths.extend(ideas_files)
             if ideas_files:
+                touched_paths.extend(ideas_files)
                 print(f"  -> Idee create: {len(ideas_files)}")
+            else:
+                errors.append(
+                    "Sezione Ideas: nessuna idea creata da una sezione non vuota."
+                )
         except Exception as exc:
             errors.append(f"Sezione Ideas: {exc}")
 
@@ -176,9 +184,13 @@ def main() -> int:
     if sections["notes"]:
         try:
             notes_files = process_notes(sections["notes"], source_date, config)
-            touched_paths.extend(notes_files)
             if notes_files:
+                touched_paths.extend(notes_files)
                 print(f"  -> Note create: {len(notes_files)}")
+            else:
+                errors.append(
+                    "Sezione Notes: nessuna nota creata da una sezione non vuota."
+                )
         except Exception as exc:
             errors.append(f"Sezione Notes: {exc}")
 
@@ -186,13 +198,23 @@ def main() -> int:
     if sections["links"]:
         try:
             links_files = process_links(sections["links"], source_date, config)
-            touched_paths.extend(links_files)
             if links_files:
+                touched_paths.extend(links_files)
                 print(f"  -> Link archiviati: {len(links_files)}")
+            else:
+                errors.append(
+                    "Sezione Links: nessun link estratto da una sezione non vuota."
+                )
         except Exception as exc:
             errors.append(f"Sezione Links: {exc}")
 
-    # 5. Fail-safe critico: se una qualsiasi sezione è fallita, NON eliminare la Daily Note
+    total_extracted = (
+        todos_count + len(ideas_files) + len(notes_files) + len(links_files)
+    )
+    if total_extracted == 0 and not errors:
+        errors.append("Nessun elemento estratto dalla Daily Note.")
+
+    # 5. Fail-safe critico: se una qualsiasi sezione è fallita o non ha prodotto output, NON eliminare la Daily Note
     if errors:
         print(
             "\n[ERRORE] Si sono verificati errori durante l'elaborazione:",

@@ -119,20 +119,39 @@ def git_commit(
 
     ensure_vault_gitignore(vault_path)
 
-    if paths_to_stage:
-        rel_paths: list[str] = []
-        for p in paths_to_stage:
+    if paths_to_stage is not None:
+        abs_vault = os.path.abspath(vault_path)
+        existing_rel_paths: list[str] = []
+        deleted_rel_paths: list[str] = []
+
+        for p in dict.fromkeys(paths_to_stage):
             abs_p = os.path.abspath(p)
-            if abs_p.startswith(os.path.abspath(vault_path)):
-                rel_paths.append(os.path.relpath(abs_p, vault_path))
-        if rel_paths:
+            try:
+                if os.path.commonpath([abs_p, abs_vault]) != abs_vault or abs_p == abs_vault:
+                    continue
+            except ValueError:
+                continue
+
+            rel_p = os.path.relpath(abs_p, abs_vault)
+            if os.path.exists(abs_p):
+                existing_rel_paths.append(rel_p)
+            else:
+                deleted_rel_paths.append(rel_p)
+
+        if existing_rel_paths:
             subprocess.run(
-                ["git", "add", "--"] + rel_paths,
+                ["git", "add", "--"] + existing_rel_paths,
                 cwd=vault_path,
                 check=True,
             )
-        else:
-            subprocess.run(["git", "add", "-A"], cwd=vault_path, check=True)
+        if deleted_rel_paths:
+            # Usa 'git rm --ignore-unmatch' così se la Daily Note eliminata non era
+            # ancora tracciata da Git non fallisce con exit status 128.
+            subprocess.run(
+                ["git", "rm", "--quiet", "--ignore-unmatch", "--"] + deleted_rel_paths,
+                cwd=vault_path,
+                check=True,
+            )
     else:
         subprocess.run(["git", "add", "-A"], cwd=vault_path, check=True)
 
