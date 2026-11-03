@@ -1,6 +1,7 @@
 # Sblumbo 🧠🗂️
 
 An automated, zero-dependency Python toolchain for your **Obsidian Vault** powered by local LLMs (**Ollama**). It consists of two complementary workflows:
+
 1. **Sblumbo (`sblumbo.py`)**: Daily Note ingestion that extracts, enriches, and triages tasks, notes, ideas, and web links into your Vault with an automatic Git commit.
 2. **SblumBot (`telegram_bot.py`)**: A morning assistant that reviews remaining tasks, generates a calm daily focus summary, dynamically groups tasks into thematic categories with emojis, and delivers a private briefing to your Telegram.
 
@@ -82,24 +83,24 @@ Copy the `.env.example` file to `.env` and adjust the variables for your setup:
 cp .env.example .env
 ```
 
-| Variable             | Default                           | Description                                                            |
-| :------------------- | :-------------------------------- | :--------------------------------------------------------------------- |
-| `VAULT_PATH`         | `~/Obsidian`                      | Absolute path or `~` to the root of your Obsidian Vault.               |
-| `TODO_FILE`          | `Tasks.md`                        | Target file for tasks (relative to `VAULT_PATH` or absolute).          |
-| `NOTES_DIR`          | `Notes`                           | Target directory for notes (relative to `VAULT_PATH` or absolute).     |
-| `IDEAS_DIR`          | `Ideas`                           | Target directory for ideas (relative to `VAULT_PATH` or absolute).     |
-| `LINKS_DIR`          | `Links`                           | Target directory for links (relative to `VAULT_PATH` or absolute).     |
-| `DAILY_DIR`          | `Daily`                           | Directory containing Daily Notes.                                      |
-| `OLLAMA_URL`         | `http://127.0.0.1:11434/api/chat` | Ollama chat API endpoint.                                              |
-| `OLLAMA_MODEL`       | `qwen3:4b`                        | Ollama model to use (supports standard and thinking models).          |
-| `OLLAMA_TIMEOUT`     | `300`                             | Maximum timeout in seconds per Ollama request.                         |
-| `OLLAMA_TEMPERATURE` | `0.1`                             | Model temperature (lower values minimize hallucinations).              |
-| `OLLAMA_NUM_PREDICT` | `512`                             | Maximum number of tokens generated per call.                           |
-| `OLLAMA_THINK`       | `false`                           | Disable/enable thinking traces for reasoning models (e.g., `qwen3:4b`).|
-| `URL_FETCH_TIMEOUT`  | `6`                               | Timeout in seconds for webpage metadata scraping.                      |
-| `GIT_AUTO_COMMIT`    | `true`                            | If `true`, automatically commits changes to the Vault after ingestion. |
-| `TELEGRAM_BOT_TOKEN` | `""`                              | Telegram Bot API token for SblumBot notifications.                     |
-| `TELEGRAM_CHAT_ID`   | `""`                              | Telegram Chat ID where morning briefings are delivered.                |
+| Variable             | Default                           | Description                                                             |
+| :------------------- | :-------------------------------- | :---------------------------------------------------------------------- |
+| `VAULT_PATH`         | `~/Obsidian`                      | Absolute path or `~` to the root of your Obsidian Vault.                |
+| `TODO_FILE`          | `Tasks.md`                        | Target file for tasks (relative to `VAULT_PATH` or absolute).           |
+| `NOTES_DIR`          | `Notes`                           | Target directory for notes (relative to `VAULT_PATH` or absolute).      |
+| `IDEAS_DIR`          | `Ideas`                           | Target directory for ideas (relative to `VAULT_PATH` or absolute).      |
+| `LINKS_DIR`          | `Links`                           | Target directory for links (relative to `VAULT_PATH` or absolute).      |
+| `DAILY_DIR`          | `Daily`                           | Directory containing Daily Notes.                                       |
+| `OLLAMA_URL`         | `http://127.0.0.1:11434/api/chat` | Ollama chat API endpoint.                                               |
+| `OLLAMA_MODEL`       | `qwen3:4b`                        | Ollama model to use (supports standard and thinking models).            |
+| `OLLAMA_TIMEOUT`     | `300`                             | Maximum timeout in seconds per Ollama request.                          |
+| `OLLAMA_TEMPERATURE` | `0.1`                             | Model temperature (lower values minimize hallucinations).               |
+| `OLLAMA_NUM_PREDICT` | `512`                             | Maximum number of tokens generated per call.                            |
+| `OLLAMA_THINK`       | `false`                           | Disable/enable thinking traces for reasoning models (e.g., `qwen3:4b`). |
+| `URL_FETCH_TIMEOUT`  | `6`                               | Timeout in seconds for webpage metadata scraping.                       |
+| `GIT_AUTO_COMMIT`    | `true`                            | If `true`, automatically commits changes to the Vault after ingestion.  |
+| `TELEGRAM_BOT_TOKEN` | `""`                              | Telegram Bot API token for SblumBot notifications.                      |
+| `TELEGRAM_CHAT_ID`   | `""`                              | Telegram Chat ID where morning briefings are delivered.                 |
 
 ---
 
@@ -108,11 +109,13 @@ cp .env.example .env
 A standalone morning worker that reviews all pending, unchecked tasks from `Tasks.md`, asks Qwen to produce a calm daily focus summary, dynamically categorizes tasks with contextual emojis, and delivers an HTML-formatted briefing to your Telegram chat.
 
 ### Key Highlights
-- **Dynamic Context-Aware Categorization**: The LLM analyzes the semantic meaning of your tasks on the fly and groups them into relevant categories (e.g. 💊 *Health & Pharmacy*, 💻 *Tech & Automation*, 🛒 *Errands*, 💼 *Work*). No empty buckets or rigid predefined schemas.
+
+- **Dynamic Context-Aware Categorization**: The LLM analyzes the semantic meaning of your tasks on the fly and groups them into relevant categories (e.g. 💊 _Health & Pharmacy_, 💻 _Tech & Automation_, 🛒 _Errands_, 💼 _Work_). No empty buckets or rigid predefined schemas.
 - **Calm, Clutter-Free Presentation**: Uses a clean notebook (`📓`) header, strips `#YYYY-MM-DD` date tags from task lines, avoids artificial urgency indicators (`⚡`), and eliminates redundant metadata for quick reading.
 - **Safe HTML & Automatic Chunking**: Dynamically sanitizes text against HTML injection and splits messages exceeding Telegram's 4,096-character limit into clean parts.
 
 ### Message Preview Example
+
 ```text
 📓 SblumBot — Morning Briefing
 
@@ -128,6 +131,7 @@ Panoramica tranquilla della giornata: configurazione delle notifiche Telegram e 
 ```
 
 ### Usage
+
 ```bash
 # Preview briefing in terminal without sending to Telegram
 python3 telegram_bot.py --dry-run
@@ -146,7 +150,7 @@ python3 telegram_bot.py --quiet-if-empty
 
 ## 🚀 Sblumbo: Daily Note Ingestion Usage
 
-Sblumbo requires no external Python packages (runs on standard Python 3.10+). Ensure `ollama` is running and the configured model is pulled (`ollama pull qwen2.5:3b`).
+Sblumbo requires no external Python packages (runs on standard Python 3.10+). Ensure `ollama` is running and the configured model is pulled (`ollama pull qwen3:4b`).
 
 ### 1. Run with an explicit path
 
@@ -208,7 +212,7 @@ The parser recognizes headings regardless of emoji spacing or heading depth (`#`
 ```markdown
 ### 📝 Todo
 
-- Migrate notes from Keep and uninstall the app
+- Migrate notes from Keep
 - Set up automated backup
 
 ### 💡 Ideas
@@ -217,7 +221,7 @@ The parser recognizes headings regardless of emoji spacing or heading depth (`#`
 
 ### 📦 Notes
 
-- 1-hour team meeting regarding the Serf project
+- 1-hour team meeting regarding the project team
 - Quick command to check listening ports with ss -tulpn
 
 ### 🔗 Links
