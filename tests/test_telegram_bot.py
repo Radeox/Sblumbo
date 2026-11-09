@@ -118,15 +118,77 @@ class TestExtractPendingTodos(unittest.TestCase):
             clean_summary("giornata tranquilla dedicata a commissioni."),
             "Giornata tranquilla dedicata a commissioni.",
         )
+        self.assertEqual(
+            clean_summary("Una frase sintetica di massimo 15-2.0 parole"),
+            "",
+        )
+        self.assertEqual(
+            clean_summary("Una frase sintetica di massimo 15-20 parole"),
+            "",
+        )
+        self.assertEqual(
+            clean_summary("string"),
+            "",
+        )
 
 
 class TestMorningBriefingFormatting(unittest.TestCase):
     """Test AI briefing generation and Telegram HTML message layout."""
 
     @patch("worker.telegram.query_ollama")
+    def test_generate_morning_briefing_placeholder_fallback(self, mock_ollama) -> None:
+        """When LLM hallucinates schema dummy values ('string'), bot must preserve all todos."""
+        mock_ollama.return_value = {
+            "categories": [
+                {
+                    "title": "string",
+                    "emoji": "string",
+                    "tasks": ["string"],
+                }
+            ],
+        }
+        cfg = make_test_config("/tmp")
+        todos = ["Chiamare gommista per Toyota", "Lavare macchine", "Comprare il pane"]
+        briefing = generate_morning_briefing(todos, cfg)
+
+        self.assertEqual(len(briefing["categories"]), 1)
+        self.assertEqual(briefing["categories"][0]["title"], "Tutti i Task")
+        self.assertEqual(briefing["categories"][0]["tasks"], todos)
+
+        # Message format check: no Today's Focus, all categories and tasks preserved
+        msg = format_telegram_message(briefing, total_count=len(todos))
+        self.assertNotIn("Today's Focus", msg)
+        self.assertNotIn("💡", msg)
+        self.assertNotIn("string string", msg)
+        self.assertNotIn("• String", msg)
+        for t in todos:
+            self.assertIn(t, msg)
+
+    @patch("worker.telegram.query_ollama")
+    def test_generate_morning_briefing_recovers_missing_todos(self, mock_ollama) -> None:
+        """When LLM omits some todos, the missing ones are placed in 'Altri Task'."""
+        mock_ollama.return_value = {
+            "categories": [
+                {
+                    "title": "Auto",
+                    "emoji": "🚗",
+                    "tasks": ["Chiamare gommista per Toyota"],
+                }
+            ],
+        }
+        cfg = make_test_config("/tmp")
+        todos = ["Chiamare gommista per Toyota", "Lavare macchine"]
+        briefing = generate_morning_briefing(todos, cfg)
+
+        self.assertEqual(len(briefing["categories"]), 2)
+        self.assertEqual(briefing["categories"][0]["title"], "Auto")
+        self.assertEqual(briefing["categories"][0]["tasks"], ["Chiamare gommista per Toyota"])
+        self.assertEqual(briefing["categories"][1]["title"], "Altri Task")
+        self.assertEqual(briefing["categories"][1]["tasks"], ["Lavare macchine"])
+
+    @patch("worker.telegram.query_ollama")
     def test_generate_morning_briefing_success(self, mock_ollama) -> None:
         mock_ollama.return_value = {
-            "summary": "Today is focused on server maintenance and invoice processing.",
             "categories": [
                 {
                     "title": "Work & Admin",
@@ -142,7 +204,6 @@ class TestMorningBriefingFormatting(unittest.TestCase):
         }
         cfg = make_test_config(self.tmp_dir if hasattr(self, "tmp_dir") else "/tmp")
         briefing = generate_morning_briefing(["Task 1", "Task 2"], cfg)
-        self.assertIn("summary", briefing)
         self.assertEqual(len(briefing["categories"]), 2)
 
     @patch("worker.telegram.query_ollama")
@@ -152,13 +213,11 @@ class TestMorningBriefingFormatting(unittest.TestCase):
         todos = ["Buy milk", "Fix server"]
         briefing = generate_morning_briefing(todos, cfg)
         # Should gracefully return a fallback structure with original tasks
-        self.assertIn("summary", briefing)
         self.assertEqual(len(briefing["categories"]), 1)
         self.assertEqual(briefing["categories"][0]["tasks"], todos)
 
     def test_format_telegram_message_with_tasks(self) -> None:
         briefing = {
-            "summary": "Focus on high priority client work today.",
             "categories": [
                 {
                     "title": "⚡ Work Projects",
@@ -175,6 +234,9 @@ class TestMorningBriefingFormatting(unittest.TestCase):
         msg = format_telegram_message(briefing, total_count=2)
         # Verify notebook header and bot identity
         self.assertIn("📓 <b>SblumBot — Morning Briefing</b>", msg)
+        # Verify Today's Focus is removed
+        self.assertNotIn("Today's Focus", msg)
+        self.assertNotIn("💡", msg)
         # Verify date line and total count are excluded as requested
         self.assertNotIn("Total Pending", msg)
         self.assertNotIn("Tuesday", msg)
@@ -186,7 +248,6 @@ class TestMorningBriefingFormatting(unittest.TestCase):
         # Verify leading emoji is not duplicated
         self.assertIn("💼 <b>Work Projects</b>", msg)
         self.assertIn("🛒 <b>Errands</b>", msg)
-        self.assertIn("Focus on high priority client work today.", msg)
 
     def test_format_telegram_message_empty_todos(self) -> None:
         msg = format_telegram_message(briefing=None, total_count=0)

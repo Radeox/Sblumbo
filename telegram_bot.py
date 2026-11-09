@@ -68,7 +68,6 @@ def main() -> int:
         briefing = None
     elif args.no_ai:
         briefing = {
-            "summary": "",
             "categories": [{"title": "Pending Tasks", "emoji": "📋", "tasks": todos}],
         }
     else:

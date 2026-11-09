@@ -20,6 +20,21 @@ _UNCHECKED_TASK_RE = re.compile(
 )
 
 
+def is_placeholder_text(text: str) -> bool:
+    """Check if a string looks like dummy schema types or prompt instruction placeholders."""
+    if not text:
+        return True
+    s = text.strip().lower()
+    if s in {"string", "str", "none", "null", "undefined", "todo", "task", "tasks"}:
+        return True
+    clean_s = re.sub(r"[^\w\s]", " ", s)
+    if re.search(r"\buna\s+frase\s+sintetica\b", clean_s):
+        return True
+    if re.search(r"\bmassimo\s+15\s*20\s+parole\b", clean_s) or re.search(r"\bmassimo\s+15\s*2\s*0\s+parole\b", clean_s):
+        return True
+    return False
+
+
 def clean_task_display(task: str) -> str:
     """Strip date tags (#YYYY-MM-DD, 📅 YYYY-MM-DD) and clean/capitalize task text for display."""
     cleaned = re.sub(r"\s*(?:📅\s*#?|#)\d{4}-\d{2}-\d{2}\b", "", task)
@@ -32,16 +47,23 @@ def clean_summary(summary: str) -> str:
     if not summary:
         return ""
     cleaned = summary.strip()
-    # Strip common robotic prefixes like:
-    # "Ecco una panoramica (tranquilla|generale|delle attività)?...: "
-    # "Ecco un riepilogo...: "
-    # "Riepilogo della giornata: "
+    if is_placeholder_text(cleaned):
+        return ""
+
     pattern = (
         r"^(?:Ecco\s+(?:una\s+|un\s+|il\s+)?(?:panoramica|riepilogo|sintesi|quadro)[\w\s]*:\s*"
         r"|Riepilogo(?:\s+della\s+giornata)?:\s*)"
     )
     cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
-    return capitalize_first(cleaned) if cleaned else summary.strip()
+    if is_placeholder_text(cleaned):
+        return ""
+
+    return capitalize_first(cleaned) if cleaned else ""
+
+
+def _normalize_task_text(text: str) -> str:
+    """Lowercase and strip punctuation for soft matching tasks."""
+    return re.sub(r"[^\w]+", "", text.lower())
 
 
 def extract_pending_todos(tasks_path: str) -> list[str]:
@@ -80,22 +102,27 @@ def extract_pending_todos(tasks_path: str) -> list[str]:
         if m:
             task_text = m.group(1).strip()
             cleaned_task = clean_task_display(task_text)
-            if has_meaningful_content(cleaned_task):
+            if has_meaningful_content(cleaned_task) and not is_placeholder_text(cleaned_task):
                 pending.append(cleaned_task)
 
     return pending
 
 
 def generate_morning_briefing(todos: list[str], config: Config) -> dict[str, Any]:
-    """Call Ollama to create a general recap and group pending todos into categories.
+    """Call Ollama to group pending todos into categories.
 
-    Falls back to a default un-categorized structure if Ollama fails.
+    Falls back to a default un-categorized structure if Ollama fails or produces invalid data.
+    Ensures that 100% of pending todos are preserved and no placeholder dummy data is shown.
     """
     if not todos:
-        return {"summary": "", "categories": []}
+        return {"categories": []}
 
     todos_text = "\n".join(f"- {t}" for t in todos)
-    user_prompt = f"Elenco dei task da analizzare:\n{todos_text}"
+    user_prompt = (
+        f"Ecco l'elenco dei {len(todos)} task da categorizzare:\n"
+        f"{todos_text}\n\n"
+        "Genera il JSON raggruppando tutti i task nelle rispettive 'categories'."
+    )
 
     try:
         data = query_ollama(
@@ -106,31 +133,69 @@ def generate_morning_briefing(todos: list[str], config: Config) -> dict[str, Any
             config=config,
             json_schema=MORNING_RECAP_SCHEMA,
         )
-        summary = clean_summary(str(data.get("summary", "")).strip())
         raw_cats = data.get("categories", [])
         categories: list[dict[str, Any]] = []
 
+        # Map normalized versions of input todos to original string
+        normalized_todos = {_normalize_task_text(t): t for t in todos}
+        matched_todos: set[str] = set()
+
         if isinstance(raw_cats, list):
             for cat in raw_cats:
-                if isinstance(cat, dict):
-                    title = str(cat.get("title", "")).strip() or "General"
-                    emoji = str(cat.get("emoji", "")).strip() or "📋"
-                    tasks = [clean_task_display(str(t).strip()) for t in cat.get("tasks", []) if t]
-                    tasks = [t for t in tasks if t]
-                    if tasks:
-                        categories.append({"title": title, "emoji": emoji, "tasks": tasks})
+                if not isinstance(cat, dict):
+                    continue
 
+                raw_title = str(cat.get("title", "")).strip()
+                raw_emoji = str(cat.get("emoji", "")).strip()
+
+                title = "Attività" if is_placeholder_text(raw_title) else (raw_title or "Attività")
+                emoji = (
+                    "📋"
+                    if (is_placeholder_text(raw_emoji) or (raw_emoji.isalpha() and len(raw_emoji) > 2))
+                    else (raw_emoji or "📋")
+                )
+
+                tasks: list[str] = []
+                for raw_t in cat.get("tasks", []):
+                    t_str = str(raw_t).strip()
+                    if not t_str or is_placeholder_text(t_str):
+                        continue
+                    clean_t = clean_task_display(t_str)
+                    if not clean_t or is_placeholder_text(clean_t):
+                        continue
+
+                    norm_t = _normalize_task_text(clean_t)
+                    matched_orig = normalized_todos.get(norm_t)
+                    if not matched_orig:
+                        for norm_orig, orig_str in normalized_todos.items():
+                            if norm_orig in norm_t or norm_t in norm_orig:
+                                matched_orig = orig_str
+                                break
+
+                    if matched_orig:
+                        tasks.append(matched_orig)
+                        matched_todos.add(matched_orig)
+                    else:
+                        tasks.append(clean_t)
+
+                if tasks:
+                    categories.append({"title": title, "emoji": emoji, "tasks": tasks})
+
+        # If no valid categories were formed (e.g. LLM returned pure placeholders):
         if not categories:
-            categories = [{"title": "Pending Tasks", "emoji": "📋", "tasks": todos}]
+            categories = [{"title": "Tutti i Task", "emoji": "📋", "tasks": todos}]
+        elif matched_todos:
+            # If the LLM matched some tasks but dropped others, ensure no todos are lost
+            missing = [t for t in todos if t not in matched_todos]
+            if missing:
+                categories.append({"title": "Altri Task", "emoji": "📋", "tasks": missing})
 
         return {
-            "summary": summary or "Riepilogo delle attività in sospeso per oggi.",
             "categories": categories,
         }
     except Exception as exc:
         print(f"[WARN] Ollama morning recap fallback ({exc})")
         return {
-            "summary": f"Hai {len(todos)} task in sospeso da gestire oggi.",
             "categories": [{"title": "Tutti i Task", "emoji": "📋", "tasks": todos}],
         }
 
@@ -147,14 +212,14 @@ def format_telegram_message(briefing: dict[str, Any] | None, total_count: int) -
 
     lines: list[str] = [header]
 
-    summary = clean_summary(briefing.get("summary", ""))
-    if summary:
-        safe_summary = html.escape(summary)
-        lines.append(f"💡 <b>Today's Focus:</b>\n{safe_summary}\n")
-
     for cat in briefing.get("categories", []):
         raw_emoji = str(cat.get("emoji", "")).strip()
         raw_title = str(cat.get("title", "Tasks")).strip()
+
+        if is_placeholder_text(raw_title):
+            raw_title = "Attività"
+        if is_placeholder_text(raw_emoji) or (raw_emoji.isalpha() and len(raw_emoji) > 2):
+            raw_emoji = "📋"
 
         # Strip any leading emoji from title to avoid duplicate symbols (e.g. 💼 💼 Work)
         cleaned_title = re.sub(
@@ -171,11 +236,18 @@ def format_telegram_message(briefing: dict[str, Any] | None, total_count: int) -
         if not tasks:
             continue
 
-        lines.append(f"{emoji} <b>{safe_title}</b>")
+        valid_tasks = []
         for t in tasks:
             clean_t = clean_task_display(str(t).strip())
-            if clean_t:
-                lines.append(f"• {html.escape(clean_t)}")
+            if clean_t and not is_placeholder_text(clean_t):
+                valid_tasks.append(clean_t)
+
+        if not valid_tasks:
+            continue
+
+        lines.append(f"{emoji} <b>{safe_title}</b>")
+        for t in valid_tasks:
+            lines.append(f"• {html.escape(t)}")
         lines.append("")
 
     return "\n".join(lines).strip()

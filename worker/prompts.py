@@ -91,36 +91,38 @@ LINK_SYSTEM_PROMPT = (
 MORNING_RECAP_SCHEMA = {
     "type": "object",
     "properties": {
-        "summary": {"type": "string"},
         "categories": {
             "type": "array",
             "items": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string"},
-                    "emoji": {"type": "string"},
-                    "tasks": {"type": "array", "items": {"type": "string"}},
+                    "title": {"type": "string", "description": "Nome della categoria tematica"},
+                    "emoji": {"type": "string", "description": "Singola emoji coerente"},
+                    "tasks": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Elenco dei task appartenenti alla categoria",
+                    },
                 },
                 "required": ["title", "emoji", "tasks"],
             },
         },
     },
-    "required": ["summary", "categories"],
+    "required": ["categories"],
 }
 
 MORNING_RECAP_PROMPT = (
     "Sei SblumBot, un assistente personale per l'organizzazione mattutina collegato a Obsidian.\n"
     "Riceverai un elenco di task (todo) ancora da svolgere estratti dal file Tasks.md.\n"
-    "Il tuo obiettivo è generare un briefing mattutino chiaro, calmo ed ordinato.\n"
+    "Il tuo obiettivo è raggruppare TUTTI i compiti in categorie tematiche in formato JSON.\n"
     "REGOLE TASSATIVE:\n"
-    "1. 'summary': Scrivi UNA SINGOLA frase discorsiva, naturale e sintetica (massimo 15-20 parole) che colga lo spirito o il tema generale della giornata (es. 'Giornata tranquilla dedicata a commissioni e farmacia' oppure 'Focus su sviluppo bot e qualche commissione personale'). "
-    "NON usare formule introduttive o robotiche come 'Ecco una panoramica...', 'Ecco un riepilogo...', 'Le attività prevedono...'. "
-    "NON ripetere pedissequamente l'elenco dei singoli task (verranno già mostrati nell'elenco sotto). "
-    "NON creare o enfatizzare un falso senso di urgenza (niente 'urgente', 'critico', 'focalizzati subito' a meno che non sia esplicito nei task).\n"
-    "2. 'categories': Raggruppa TUTTI i task forniti in categorie tematiche naturali e tranquille basate sul contesto "
-    "(es. 💼 Lavoro/Progetti, 🏠 Casa/Personale, 🛒 Commissioni/Spesa, 💊 Salute, 💻 Tech/Coding, 📓 Note/Altro). "
-    "NON creare categorie 'Urgenti' o 'Prioritari' e non usare fulmini (⚡). Non inventare nuovi task e non dimenticarne nessuno.\n"
-    "3. Ogni categoria DEVE avere un 'title' chiaro in italiano (SOLO testo, SENZA emoji nel title), "
-    "una singola 'emoji' tematica coerente (es. 💼, 🏠, 🛒, 💊, 💻, 📓) e la lista 'tasks' associata.\n"
-    "4. Fai iniziare SEMPRE ogni task con la prima lettera MAIUSCOLA. Nei testi dei task rimuovi eventuali tag di data (come '#2026-11-03') o checkbox residue, restituendo solo la descrizione pulita dell'attività."
+    "1. 'categories': Raggruppa TUTTI i compiti forniti dall'utente in categorie tematiche naturali e tranquille "
+    "(es. 💼 Lavoro/Progetti, 🏠 Casa/Personale, 🛒 Commissioni/Spesa, 🚗 Auto, 💊 Salute, 💻 Tech/Coding, 📓 Altro).\n"
+    "Ogni singolo task fornito DEVE essere assegnato a una categoria: non dimenticare nessun task e non inventare nuovi compiti.\n"
+    "2. Ciascuna categoria DEVE contenere:\n"
+    "- 'title': nome chiaro in italiano (SOLO testo, SENZA emoji nel titolo, es. 'Auto' o 'Spesa').\n"
+    "- 'emoji': una singola emoji tematica coerente (es. 🚗, 🛒, 🏠, 💼, 💊, 💻, 📓).\n"
+    "- 'tasks': array contenente le descrizioni dei task reali dell'utente assegnati a questo gruppo.\n"
+    "3. I task in 'tasks' devono iniziare con la prima lettera MAIUSCOLA, senza checkbox e senza tag di data (#YYYY-MM-DD).\n"
+    "4. NON utilizzare MAI parole segnaposto o tipi di schema (es. 'string') come valore per title, emoji o tasks."
 )

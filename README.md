@@ -114,22 +114,6 @@ A standalone morning worker that reviews all pending, unchecked tasks from `Task
 - **Calm, Clutter-Free Presentation**: Uses a clean notebook (`📓`) header, strips `#YYYY-MM-DD` date tags from task lines, avoids artificial urgency indicators (`⚡`), and eliminates redundant metadata for quick reading.
 - **Safe HTML & Automatic Chunking**: Dynamically sanitizes text against HTML injection and splits messages exceeding Telegram's 4,096-character limit into clean parts.
 
-### Message Preview Example
-
-```text
-📓 SblumBot — Morning Briefing
-
-💡 Today's Focus:
-Panoramica tranquilla della giornata: configurazione delle notifiche Telegram e ritiro dei farmaci in farmacia.
-
-💊 Salute & Farmacia
-• ritirare sensori in farmacia borgo
-• ritirare eliquis in farmacia borgo
-
-💻 Tech & Automazioni
-• Configura bot Telegram per inviare notifiche da Obsidian al mattino
-```
-
 ### Usage
 
 ```bash
@@ -227,7 +211,6 @@ The parser recognizes headings regardless of emoji spacing or heading depth (`#`
 ### 🔗 Links
 
 - https://github.com/raspberrypi/rpi-image-gen
-- serfsrl.it - Official air filtration website
 ```
 
 ---
